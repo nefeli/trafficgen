@@ -154,7 +154,7 @@ static void worker_loop(struct pktgen_config *config) {
     struct rte_mbuf *tx_bufs[NUM_PKTS];
     uint32_t nb_tx, nb_rx, tx_head, i,
              tx_rate = config->tx_rate, sample_count = 0,
-             num_samples = (tx_rate * 1000000 * config->duration) / (64 * 8 + 160);
+             num_samples = (tx_rate * 1000000 * config->duration) / (84 * 8);
     struct rte_mbuf *rx_bufs[config->rx_ring_size] UNUSED;
     double now, start_time = get_time_sec(),
            *samples = (double*)malloc(2*num_samples * sizeof(double));
