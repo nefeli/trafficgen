@@ -259,12 +259,18 @@ int main(int argc, char *argv[]) {
             rte_eal_wait_lcore(i);
             rte_eal_remote_launch(launch_worker, (void*)&config[i], i);
             core++;
+            port++;
         }
 
         rte_eal_mp_wait_lcore();
 
+        port = 0;
         RTE_LCORE_FOREACH_SLAVE(i) {
+            if (port == nb_ports) {
+                break;
+            }
             printf("Core %u: Results\n{%s\n    %s}\n", i, config[i].o_delay, config[i].o_xput);
+            port++;
         }
     }
     ret = write_history(HISTORY_FILE);
