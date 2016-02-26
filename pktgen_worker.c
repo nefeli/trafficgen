@@ -124,11 +124,14 @@ static void generate_traffic(struct rte_mbuf **tx_bufs, struct pktgen_config *co
         ip_hdr->time_to_live = 64;
         ip_hdr->next_proto_id = 17;
         ip_hdr->packet_id = 0;
+        ip_hdr->version_ihl = (1 << 5) + 5;
+        ip_hdr->hdr_checksum = 0;
 
         flow = ranval(&config->seed) % config->num_flows;
         ip_hdr->src_addr = rte_cpu_to_be_32(flow * config->ip_min / config->num_flows);
         ip_hdr->dst_addr = rte_cpu_to_be_32((flow ^ key) * config->ip_min / config->num_flows);
         ip_hdr->total_length = rte_cpu_to_be_16(pkt_size - 4 - sizeof(*eth_hdr));
+        ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
 
         udp_hdr = (struct udp_hdr *)(ip_hdr + 1);
         udp_hdr->src_port = rte_cpu_to_be_16(ip_hdr->src_addr % config->udp_min);
