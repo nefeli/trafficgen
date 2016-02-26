@@ -43,9 +43,9 @@ At the `tgen>` prompt use the following flags to generate traffic:
 Traffic Gen Options and Flags
         -m M          Transmit at M mpbs
         -t T          Generate traffic for T seconds
-        -w W          Warmup for W seconds before generating traffic
+        -w W          Warmup for W seconds before making measurements
         -n N          Generate a uniform distribution of N flows
-        -s MIN[-MAX]  Genearte packets with sizes in [MIN,MAX] (or only of size MIN if MAX isn't specified)
+        -s MIN[-MAX]  Generate packets with sizes in [MIN,MAX] (or only of size MIN if MAX isn't specified)
         -r            Randomize packet payloads
         -l            Measure latency
 ```
