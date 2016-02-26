@@ -229,12 +229,13 @@ static void worker_loop(struct pktgen_config *config) {
         for (i = 0; i < nb_rx; i++) {
             r_stats.rx_bytes += rx_bufs[i]->pkt_len;
             if (cfg.flags & FLAG_MEASURE_LATENCY) {
-                double *p = rte_pktmbuf_mtod_offset(rx_bufs[i], double *,
-                        sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) +
-                        sizeof(struct udp_hdr));
-                *p = now - *p;
                 if (!(total_rx % 100)) {
-                    samples[sample_count++] = *p;
+                    double *p = rte_pktmbuf_mtod_offset(rx_bufs[i], double *,
+                            sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) +
+                            sizeof(struct udp_hdr));
+                    if (*p > 0) {
+                        samples[sample_count++] = now - *p;
+                    }
                 }
                 total_rx++;
             }
