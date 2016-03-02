@@ -37,6 +37,7 @@
 
 #define FLAG_MEASURE_LATENCY 1
 #define FLAG_RANDOMIZE_PAYLOAD (1<<1)
+#define FLAG_GENERATE_ONLINE (1<<2)
 
 struct pktgen_config {
     uint8_t port;
