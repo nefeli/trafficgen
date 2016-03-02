@@ -118,7 +118,7 @@ static void generate_packet(struct rte_mbuf *buf, struct pktgen_config *config, 
     ip_hdr->time_to_live = 64;
     ip_hdr->next_proto_id = 17;
     ip_hdr->packet_id = 0;
-    ip_hdr->version_ihl = (1 << 5) + 5;
+    ip_hdr->version_ihl = (1 << 6) + 5;
     ip_hdr->hdr_checksum = 0;
 
     flow = ranval(&config->seed) % config->num_flows;
