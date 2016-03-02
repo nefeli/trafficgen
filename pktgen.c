@@ -103,7 +103,7 @@ static int lcore_init(void *arg) {
 }
 
 static void usage(void) {
-    printf("tgen> [-r] [-l] -m M -t T -w W -n N -s MIN[-MAX]\n"
+    printf("tgen> [-rlo] -m M -t T -w W -n N -s MIN[-MAX]\n"
             "Traffic Gen Options and Flags\n"
             "\t-m M          Transmit at M mpbs\n"
             "\t-t T          Generate traffic for T seconds\n"
@@ -111,20 +111,24 @@ static void usage(void) {
             "\t-n N          Generate a uniform distribution of N flows\n"
             "\t-s MIN[-MAX]  Genearte packets with sizes in [MIN,MAX] (or only of size MIN if MAX isn't specified)\n"
             "\t-r            Randomize packet payloads\n"
-            "\t-l            Measure latency\n");
+            "\t-l            Measure latency\n"
+            "\t-o            Generate packets online\n");
 }
 
 static int pktgen_parse_args(int argc, char *argv[], struct pktgen_config *cfg) {
     int c, n = 0;
     char *p, *q;
     optind = 1;
-    while ((c = getopt (argc, argv, "rlm:t:w:n:s:")) != -1) {
+    while ((c = getopt (argc, argv, "rlom:t:w:n:s:")) != -1) {
         switch (c) {
             case 'r':
                 cfg->flags |= FLAG_RANDOMIZE_PAYLOAD;
                 break;
             case 'l':
                 cfg->flags |= FLAG_MEASURE_LATENCY;
+                break;
+            case 'o':
+                cfg->flags |= FLAG_GENERATE_ONLINE;
                 break;
             case 'm':
                 cfg->tx_rate = atoi(optarg);
