@@ -92,7 +92,7 @@ static void latency_calc(double *samples, uint32_t sample_count, struct pktgen_c
             vals[4], vals[5], vals[6], vals[7]);
 }
 
-static void generate_packet(struct rte_mbuf *buf, struct pktgen_config *config, uint64_t key) {
+static void generate_packet(struct rte_mbuf *buf, struct pktgen_config *config) {
     struct ether_hdr *eth_hdr;
     struct ipv4_hdr *ip_hdr;
     struct udp_hdr *udp_hdr;
@@ -121,15 +121,15 @@ static void generate_packet(struct rte_mbuf *buf, struct pktgen_config *config, 
     ip_hdr->version_ihl = (1 << 6) + 5;
     ip_hdr->hdr_checksum = 0;
 
-    flow = ranval(&config->seed) % config->num_flows;
+    flow = 1 + ranval(&config->seed) % config->num_flows;
     ip_hdr->src_addr = rte_cpu_to_be_32(flow * config->ip_min / config->num_flows);
-    ip_hdr->dst_addr = rte_cpu_to_be_32((flow ^ key) * config->ip_min / config->num_flows);
+    ip_hdr->dst_addr = rte_cpu_to_be_32((flow ^ GEN_KEY) * config->ip_min / config->num_flows);
     ip_hdr->total_length = rte_cpu_to_be_16(pkt_size - 4 - sizeof(*eth_hdr));
     ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
 
     udp_hdr = (struct udp_hdr *)(ip_hdr + 1);
-    udp_hdr->src_port = rte_cpu_to_be_16(ip_hdr->src_addr % config->udp_min);
-    udp_hdr->dst_port = rte_cpu_to_be_16(ip_hdr->dst_addr % config->udp_min);
+    udp_hdr->src_port = rte_cpu_to_be_16(1 + (ip_hdr->src_addr % config->udp_min));
+    udp_hdr->dst_port = rte_cpu_to_be_16(1 + (ip_hdr->dst_addr % config->udp_min));
     udp_hdr->dgram_cksum = 0;
     udp_hdr->dgram_len = rte_cpu_to_be_16(pkt_size - 4 - sizeof(*eth_hdr) -
             sizeof(*ip_hdr));
@@ -146,12 +146,12 @@ static void generate_packet(struct rte_mbuf *buf, struct pktgen_config *config, 
     }
 }
 
-static void generate_traffic(struct rte_mbuf **tx_bufs, struct pktgen_config *config, uint64_t key) {
+static void generate_traffic(struct rte_mbuf **tx_bufs, struct pktgen_config *config) {
     uint32_t tx_head = 0;
 
     for (tx_head = 0; tx_head < NUM_PKTS; tx_head++) {
         tx_bufs[tx_head] = rte_pktmbuf_alloc(config->tx_pool);
-        generate_packet(tx_bufs[tx_head], config, key);
+        generate_packet(tx_bufs[tx_head], config);
     }
 }
 
@@ -164,8 +164,7 @@ static void worker_loop(struct pktgen_config *config) {
     double now, start_time = get_time_sec(),
            *samples = (double*)malloc(2*num_samples * sizeof(double));
     int64_t burst;
-    uint64_t total_rx = 0,
-             key = ranval(&config->seed) % config->num_flows;
+    uint64_t total_rx = 0;
 
     struct rate_stats r_stats = {
         .n = 0,
@@ -197,7 +196,7 @@ static void worker_loop(struct pktgen_config *config) {
     cfg.tx_ring_size = config->tx_ring_size;
     cfg.flags = config->flags;
 
-    generate_traffic(tx_bufs, config, key);
+    generate_traffic(tx_bufs, config);
 
     memset(samples, 0, sizeof(samples[0]) * 2 * num_samples);
 
@@ -254,7 +253,7 @@ static void worker_loop(struct pktgen_config *config) {
         now = get_time_sec();
         for (i = 0; i < burst; i++) {
             if (cfg.flags & FLAG_GENERATE_ONLINE) {
-                generate_packet(tx_bufs[tx_head + i], &cfg, key);
+                generate_packet(tx_bufs[tx_head + i], &cfg);
             }
 
             if (cfg.flags & FLAG_MEASURE_LATENCY) {
