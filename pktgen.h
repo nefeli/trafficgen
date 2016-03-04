@@ -32,6 +32,7 @@
 
 #define NUM_PKTS (1<<16)
 #define BURST_SIZE 32
+#define GEN_KEY 0x1234
 #define GEN_DEFAULT_RX_RING_SIZE 256
 #define GEN_DEFAULT_TX_RING_SIZE 256
 

@@ -250,8 +250,8 @@ int main(int argc, char *argv[]) {
             config[i].warmup = cmd.warmup;
             config[i].duration = cmd.duration;
             config[i].num_flows = cmd.num_flows;
-            config[i].ip_min = 0xFFFFFF00;
-            config[i].udp_min = 0xFF00;
+            config[i].ip_min = 0xAFCD0123;
+            config[i].udp_min = 0x1111;
             config[i].size_min = cmd.size_min;
             config[i].size_max = cmd.size_max;
             config[i].port = port_map[core];
