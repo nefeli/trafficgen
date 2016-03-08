@@ -107,8 +107,9 @@ static void usage(void) {
             "Traffic Gen Options and Flags\n"
             "\t-m M          Transmit at M mpbs\n"
             "\t-t T          Generate traffic for T seconds\n"
-            "\t-w W          Warmup for W seconds before generating traffic\n"
+            "\t-w W          Warmup for W seconds before collecting stats\n"
             "\t-n N          Generate a uniform distribution of N flows\n"
+            "\t-k MIN-MAX    Generate flows with lifetimes (seconds) uniformly distributed in [MIN,MAX]\n"
             "\t-s MIN[-MAX]  Genearte packets with sizes in [MIN,MAX] (or only of size MIN if MAX isn't specified)\n"
             "\t-r            Randomize packet payloads\n"
             "\t-l            Measure latency\n"
@@ -119,7 +120,7 @@ static int pktgen_parse_args(int argc, char *argv[], struct pktgen_config *cfg) 
     int c, n = 0;
     char *p, *q;
     optind = 1;
-    while ((c = getopt (argc, argv, "rlom:t:w:n:s:")) != -1) {
+    while ((c = getopt (argc, argv, "rlom:t:w:n:s:k:")) != -1) {
         switch (c) {
             case 'r':
                 cfg->flags |= FLAG_RANDOMIZE_PAYLOAD;
@@ -162,6 +163,24 @@ static int pktgen_parse_args(int argc, char *argv[], struct pktgen_config *cfg) 
                 }
                 n++;
                 break;
+            case 'k':
+                cfg->flags |= FLAG_LIMIT_FLOW_LIFE;
+                p = optarg;
+                q = strtok(p, "-");
+                if (q == NULL) {
+                    return -1;
+                }
+                cfg->life_min = atof(q);
+
+                q = strtok(NULL, "-");
+                if (q == NULL) {
+                    cfg->life_max = cfg->life_min;
+                } else {
+                    cfg->life_max = atof(q);
+                }
+                n++;
+                break;
+
             default:
                 return -1;
         }
@@ -204,6 +223,8 @@ int main(int argc, char *argv[]) {
         add_history(icmd);
         cmd.size_min = 0;
         cmd.size_max = 0;
+        cmd.life_min = 0;
+        cmd.life_max = 2;
         cmd.num_flows = 0;
         cmd.warmup = 0;
         cmd.duration = 0;
@@ -254,6 +275,8 @@ int main(int argc, char *argv[]) {
             config[i].udp_min = 0x1111;
             config[i].size_min = cmd.size_min;
             config[i].size_max = cmd.size_max;
+            config[i].life_min = cmd.life_min;
+            config[i].life_max = cmd.life_max;
             config[i].port = port_map[core];
             config[i].rx_ring_size = cmd.rx_ring_size;
             config[i].tx_ring_size = cmd.tx_ring_size;

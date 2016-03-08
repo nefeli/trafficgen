@@ -39,6 +39,7 @@
 #define FLAG_MEASURE_LATENCY 1
 #define FLAG_RANDOMIZE_PAYLOAD (1<<1)
 #define FLAG_GENERATE_ONLINE (1<<2)
+#define FLAG_LIMIT_FLOW_LIFE (1<<3)
 
 struct pktgen_config {
     uint8_t port;
@@ -55,6 +56,9 @@ struct pktgen_config {
 
     uint16_t size_min;
     uint16_t size_max;
+
+    double life_min;
+    double life_max;
 
     double start_time;
 

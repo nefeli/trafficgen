@@ -24,6 +24,10 @@ static u8 ranval( ranctx *x ) {
     return x->d;
 }
 
+static double randf (ranctx *x, double low, double high) {
+    return low + (float)ranval(x)/((double)(UINT64_MAX/(high-low)));
+}
+
 static void raninit( ranctx *x, u8 seed ) {
     u8 i;
     x->a = 0xf1ea5eed, x->b = x->c = x->d = seed;
