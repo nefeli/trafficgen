@@ -247,6 +247,13 @@ static void worker_loop(struct pktgen_config *config) {
         nb_rx = rte_eth_rx_burst(cfg.port, 0, rx_bufs, cfg.rx_ring_size);
 
         for (i = 0; i < nb_rx; i++) {
+            struct ether_addr addr;
+            rte_eth_macaddr_get(cfg.port, &addr);
+            struct ether_hdr *eth_hdr = rte_pktmbuf_mtod(rx_bufs[i], struct ether_hdr *);
+            if (!is_same_ether_addr(&addr, &eth_hdr->d_addr)) {
+                continue;
+            }
+
             r_stats.rx_bytes += rx_bufs[i]->pkt_len;
             if (cfg.flags & FLAG_MEASURE_LATENCY) {
                 if (!(total_rx % 100)) {
