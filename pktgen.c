@@ -120,8 +120,16 @@ static int pktgen_parse_args(int argc, char *argv[], struct pktgen_config *cfg) 
     int c, n = 0;
     char *p, *q;
     optind = 1;
-    while ((c = getopt (argc, argv, "rlom:t:w:n:s:k:")) != -1) {
+    cfg->flags &= !FLAG_PRINT;
+    cfg->flags &= !FLAG_WAIT;
+    while ((c = getopt (argc, argv, "pqrlom:t:w:n:s:k:")) != -1) {
         switch (c) {
+            case 'p':
+                cfg->flags |= FLAG_PRINT;
+                break;
+            case 'q':
+                cfg->flags |= FLAG_WAIT;
+                break;
             case 'r':
                 cfg->flags |= FLAG_RANDOMIZE_PAYLOAD;
                 break;
@@ -185,7 +193,7 @@ static int pktgen_parse_args(int argc, char *argv[], struct pktgen_config *cfg) 
                 return -1;
         }
     }
-    if (n < 5) {
+    if (n < 5 && !(cfg->flags & (FLAG_WAIT | FLAG_PRINT))) {
         return -1;
     }
     return 0;
@@ -216,23 +224,44 @@ int main(int argc, char *argv[]) {
         port_map[core++] = port;
     }
 
+    int i;
+    struct pktgen_config config[nb_cores];
+
+    core = 0;
+    port = 0;
+    RTE_LCORE_FOREACH_SLAVE(i) {
+        if (port == nb_ports) {
+            break;
+        }
+        memset(&config[i], 0, sizeof(struct pktgen_config));
+        config[i].flags = FLAG_WAIT;
+
+        rte_eal_remote_launch(lcore_init, (void*)&config[i], i);
+        rte_eal_wait_lcore(i);
+        rte_eal_remote_launch(launch_worker, (void*)&config[i], i);
+        core++;
+        port++;
+    }
+
     /* Parse pktgen command line */
     ret = read_history(HISTORY_FILE);
     signal(SIGINT, sig_handler);
+
+    cmd.size_min = 0;
+    cmd.size_max = 0;
+    cmd.life_min = 0;
+    cmd.life_max = 2;
+    cmd.num_flows = 0;
+    cmd.warmup = 0;
+    cmd.duration = 0;
+    cmd.tx_rate = 0;
+    cmd.flags = 0;
+    cmd.rx_ring_size = GEN_DEFAULT_RX_RING_SIZE;
+    cmd.tx_ring_size = GEN_DEFAULT_TX_RING_SIZE;
+
     while ((icmd = readline("tgen> ")) != NULL) {
         add_history(icmd);
-        cmd.size_min = 0;
-        cmd.size_max = 0;
-        cmd.life_min = 0;
-        cmd.life_max = 2;
-        cmd.num_flows = 0;
-        cmd.warmup = 0;
-        cmd.duration = 0;
-        cmd.tx_rate = 0;
-        cmd.flags = 0;
-        cmd.rx_ring_size = GEN_DEFAULT_RX_RING_SIZE;
-        cmd.tx_ring_size = GEN_DEFAULT_TX_RING_SIZE;
-
+        
         char *p, *q;
         char *cmd_argv[20], tcmd[1024];
         int cmd_argc = 1;
@@ -259,10 +288,8 @@ int main(int argc, char *argv[]) {
         }
 
         /* Launch generator */
-        int i;
         core = 0;
         port = 0;
-        struct pktgen_config config[nb_cores];
         RTE_LCORE_FOREACH_SLAVE(i) {
             if (port == nb_ports) {
                 break;
@@ -281,22 +308,11 @@ int main(int argc, char *argv[]) {
             config[i].rx_ring_size = cmd.rx_ring_size;
             config[i].tx_ring_size = cmd.tx_ring_size;
             config[i].flags = cmd.flags;
-
-            rte_eal_remote_launch(lcore_init, (void*)&config[i], i);
-            rte_eal_wait_lcore(i);
-            rte_eal_remote_launch(launch_worker, (void*)&config[i], i);
-            core++;
-            port++;
-        }
-
-        rte_eal_mp_wait_lcore();
-
-        port = 0;
-        RTE_LCORE_FOREACH_SLAVE(i) {
-            if (port == nb_ports) {
-                break;
+            if (cmd.flags & FLAG_PRINT) {
+                printf("%s\n", config[i].o_sec);
+                printf("Core %u: Results\n{%s\n    %s}\n", i, config[i].o_delay, config[i].o_xput);
             }
-            printf("Core %u: Results\n{%s\n    %s}\n", i, config[i].o_delay, config[i].o_xput);
+            core++;
             port++;
         }
     }
