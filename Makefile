@@ -42,7 +42,7 @@ include $(RTE_SDK)/mk/rte.vars.mk
 APP = pktgen
 
 # all source are stored in SRCS-y
-SRCS-y := pktgen.c
+SRCS-y := pktgen.c job.pb-c.c status.pb-c.c
 
 CFLAGS += $(WERROR_FLAGS)
 
@@ -53,6 +53,6 @@ CFLAGS_main.o += -Wno-return-type
 endif
 
 EXTRA_CFLAGS += -O3 -g -Wfatal-errors
-EXTRA_LDFLAGS += -lreadline
+EXTRA_LDFLAGS += -lreadline -lprotobuf-c
 
 include $(RTE_SDK)/mk/rte.extapp.mk

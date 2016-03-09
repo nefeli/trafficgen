@@ -1,0 +1,17 @@
+syntax = "proto3";
+
+message Job {
+    int32 tx_rate = 1;
+    int32 duration = 2;
+    int32 warmup = 3;
+    int32 num_flows = 4;
+    int32 size_min = 5;
+    int32 size_max = 6;
+    float life_min = 7;
+    float life_max = 8;
+    bool randomize = 9;
+    bool latency = 10;
+    bool online = 11;
+    bool stop = 12;
+    bool print = 13;
+}
