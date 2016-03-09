@@ -240,6 +240,7 @@ static void worker_loop(struct pktgen_config *config) {
                 rte_eth_macaddr_get(config->port, &addr);
                 struct ether_hdr *eth_hdr = rte_pktmbuf_mtod(rx_bufs[i], struct ether_hdr *);
                 if (!is_same_ether_addr(&addr, &eth_hdr->d_addr)) {
+                    rte_pktmbuf_free(rx_bufs[i]);
                     continue;
                 }
 
