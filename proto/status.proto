@@ -1,0 +1,7 @@
+message Status {
+    enum Type {
+        FAIL = 0;
+        SUCCESS = 1;
+    }
+    optional Type type = 1;
+}

@@ -15,6 +15,28 @@
 #include <readline/readline.h>
 #include <readline/history.h>
 
+/* start demo stuff */
+#include <errno.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <sys/stat.h>
+#include <sys/mman.h>
+#include <fcntl.h>
+#include <sys/wait.h>
+
+#include "job.pb-c.h"
+#include "status.pb-c.h"
+
+#define PORT "1729"
+#define SCHEDULER_IP "127.0.0.1"
+#define SCHEDULER_PORT "1800"
+#define BUFSIZE 8192
+#define BACKLOG 25
+/* end demo stuff */
+
 #include <rte_eal.h>
 #include <rte_random.h>
 #include <rte_errno.h>
@@ -30,7 +52,7 @@
 #include <rte_memcpy.h>
 #include <rte_malloc.h>
 
-#define NUM_PKTS (1<<16)
+#define NUM_PKTS 1<<16
 #define BURST_SIZE 32
 #define GEN_KEY 0x1234
 #define GEN_DEFAULT_RX_RING_SIZE 256
@@ -72,6 +94,8 @@ struct pktgen_config {
     unsigned tx_ring_size;
 
     unsigned flags;
+
+    uint32_t prefix;
 
     char o_delay[1024];
     char o_xput[1024];

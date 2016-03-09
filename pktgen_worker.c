@@ -3,10 +3,6 @@ static uint16_t gen_pkt_size(struct pktgen_config *config) {
         config->size_min;
 }
 
-static uint64_t rand_range(struct pktgen_config *config, uint64_t low, uint64_t high) {
-    return ranval(&config->seed) % (RTE_MAX(low - high, (unsigned)1)) + low;
-}
-
 static void stats(double *start_time, struct rate_stats *r_stats, struct pktgen_config *config) {
     double now = get_time_sec();
     double elapsed = now - *start_time;
@@ -137,8 +133,9 @@ static void generate_packet(struct rte_mbuf *buf, struct pktgen_config *config, 
     if (flow_ctrs[flow] == 0) {
         flow_ctrs[flow]++;
     }
-    ip_hdr->src_addr = rte_cpu_to_be_32(flow_ctrs[flow] * flow * config->ip_min / config->num_flows);
-    ip_hdr->dst_addr = rte_cpu_to_be_32(flow_ctrs[flow] * (flow ^ GEN_KEY) * config->ip_min / config->num_flows);
+
+    ip_hdr->src_addr = rte_cpu_to_be_32((~config->prefix & (flow_ctrs[flow] * flow * config->ip_min / config->num_flows)) | config->prefix);
+    ip_hdr->dst_addr = rte_cpu_to_be_32((~config->prefix & (flow_ctrs[flow] * (flow ^ GEN_KEY) * config->ip_min / config->num_flows)) | config->prefix);
     ip_hdr->total_length = rte_cpu_to_be_16(pkt_size - 4 - sizeof(*eth_hdr));
     ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
 
@@ -175,7 +172,7 @@ static void worker_loop(struct pktgen_config *config) {
     struct rte_mbuf *tx_bufs[NUM_PKTS];
     uint32_t nb_tx, nb_rx, tx_head, i, sample_count = 0,
              num_samples = NUM_SAMPLES;
-    struct rte_mbuf *rx_bufs[config->rx_ring_size] UNUSED;
+    struct rte_mbuf *rx_bufs[NUM_PKTS];
     double now, start_time = get_time_sec(),
            *samples = (double*)malloc(2*num_samples * sizeof(double));
     int64_t burst;
@@ -219,6 +216,10 @@ static void worker_loop(struct pktgen_config *config) {
     }
 
     for (;;) {
+        while (config->flags & FLAG_WAIT) {
+            rte_delay_us(1);
+        }
+
         config->start_time = get_time_sec();
         tx_head = 0;
         while (!(config->flags & FLAG_WAIT) && unlikely((now = get_time_sec()) - config->start_time < config->duration)) {
@@ -236,18 +237,21 @@ static void worker_loop(struct pktgen_config *config) {
             nb_rx = rte_eth_rx_burst(config->port, 0, rx_bufs, config->rx_ring_size);
 
             for (i = 0; i < nb_rx; i++) {
+#if 0
                 struct ether_addr addr;
                 rte_eth_macaddr_get(config->port, &addr);
                 struct ether_hdr *eth_hdr = rte_pktmbuf_mtod(rx_bufs[i], struct ether_hdr *);
+
                 if (!is_same_ether_addr(&addr, &eth_hdr->d_addr)) {
                     rte_pktmbuf_free(rx_bufs[i]);
                     continue;
                 }
+#endif
 
                 r_stats.rx_bytes += rx_bufs[i]->pkt_len;
                 if (config->flags & FLAG_MEASURE_LATENCY) {
                     uint64_t idx = 0;
-                    if ((idx = total_rx) < num_samples || (idx = rand_range(config, 0, total_rx)))  {
+                    if ((idx = total_rx) < num_samples || (idx = ranval(&config->seed) % total_rx) < num_samples)  {
                         double *p = rte_pktmbuf_mtod_offset(rx_bufs[i], double *,
                                 sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) +
                                 sizeof(struct udp_hdr));
@@ -263,11 +267,12 @@ static void worker_loop(struct pktgen_config *config) {
 
             r_stats.rx_pkts += nb_rx;
 
-            if (unlikely(tx_head + burst > NUM_PKTS)) {
+            if (unlikely(tx_head + burst >= NUM_PKTS)) {
                 tx_head = 0;
             }
 
             now = get_time_sec();
+            uint32_t lens[burst];
             for (i = 0; i < burst; i++) {
                 if (config->flags & FLAG_GENERATE_ONLINE) {
                     generate_packet(tx_bufs[tx_head + i], config, flow_times, flow_ctrs, now);
@@ -280,6 +285,7 @@ static void worker_loop(struct pktgen_config *config) {
                     *p = now;
                 }
 
+                lens[i] = tx_bufs[tx_head + i]->pkt_len;
                 if (config->flags & FLAG_GENERATE_ONLINE) {
                     rte_prefetch0(rte_pktmbuf_mtod(tx_bufs[(tx_head + i + 1) % NUM_PKTS], void*));
                 }
@@ -288,48 +294,51 @@ static void worker_loop(struct pktgen_config *config) {
             nb_tx = rte_eth_tx_burst(config->port, 0, tx_bufs + tx_head, burst);
 
             for (i = 0; i < nb_tx; i++) {
-                r_stats.tx_bytes += tx_bufs[tx_head + i]->pkt_len;
+                r_stats.tx_bytes += lens[i];
+                tx_bufs[tx_head + i] = rte_pktmbuf_alloc(config->tx_pool);
             }
             r_stats.tx_pkts += nb_tx;
 
             tx_head += nb_tx;
             tx_head %= NUM_PKTS;
         }
+
+        if (r_stats.n > 0 && sample_count > 0) {
+            r_stats.var_txpps /= (r_stats.n - 1); r_stats.var_rxpps /= (r_stats.n - 1);
+            r_stats.var_txbps /= (r_stats.n - 1); r_stats.var_rxbps /= (r_stats.n - 1);
+            r_stats.var_txwire /= (r_stats.n - 1); r_stats.var_rxwire /= (r_stats.n - 1);
+
+            latency_calc(samples, sample_count, config);
+            (void)sprintf(config->o_xput,
+                    "\"tx_mpps_mean\": %9.6f,"
+                    "\"tx_mpps_std\": %9.6f,"
+                    "\"tx_mbps_mean\": %9.6f,"
+                    "\"tx_mbps_std\": %9.6f,"
+                    "\"tx_wire_mean\": %9.6f,"
+                    "\"tx_wire_std\": %9.6f,\n    "
+                    "\"rx_mpps_mean\": %9.6f,"
+                    "\"rx_mpps_std\": %9.6f,"
+                    "\"rx_mbps_mean\": %9.6f,"
+                    "\"rx_mbps_std\": %9.6f,"
+                    "\"rx_wire_mean\": %9.6f,"
+                    "\"rx_wire_std\": %9.6f",
+                    r_stats.avg_txpps, sqrt(r_stats.var_txpps),
+                    r_stats.avg_txbps, sqrt(r_stats.var_txbps),
+                    r_stats.avg_txwire, sqrt(r_stats.var_txwire),
+                    r_stats.avg_rxpps, sqrt(r_stats.var_rxpps),
+                    r_stats.avg_rxbps, sqrt(r_stats.var_rxbps),
+                    r_stats.avg_rxwire, sqrt(r_stats.var_rxwire));
+        }
+
+        config->flags |= FLAG_WAIT; 
     }
 
     rte_delay_us(100);
+
     for (i = 0; i < NUM_PKTS; i++) {
         rte_pktmbuf_free(tx_bufs[i]);
-    }
-
-    for (i = 0; i < config->rx_ring_size; i++) {
         rte_pktmbuf_free(rx_bufs[i]);
     }
-
-    r_stats.var_txpps /= (r_stats.n - 1); r_stats.var_rxpps /= (r_stats.n - 1);
-    r_stats.var_txbps /= (r_stats.n - 1); r_stats.var_rxbps /= (r_stats.n - 1);
-    r_stats.var_txwire /= (r_stats.n - 1); r_stats.var_rxwire /= (r_stats.n - 1);
-
-    latency_calc(samples, sample_count, config);
-    (void)sprintf(config->o_xput,
-            "\"tx_mpps_mean\": %9.6f,"
-            "\"tx_mpps_std\": %9.6f,"
-            "\"tx_mbps_mean\": %9.6f,"
-            "\"tx_mbps_std\": %9.6f,"
-            "\"tx_wire_mean\": %9.6f,"
-            "\"tx_wire_std\": %9.6f,\n    "
-            "\"rx_mpps_mean\": %9.6f,"
-            "\"rx_mpps_std\": %9.6f,"
-            "\"rx_mbps_mean\": %9.6f,"
-            "\"rx_mbps_std\": %9.6f,"
-            "\"rx_wire_mean\": %9.6f,"
-            "\"rx_wire_std\": %9.6f",
-            r_stats.avg_txpps, sqrt(r_stats.var_txpps),
-            r_stats.avg_txbps, sqrt(r_stats.var_txbps),
-            r_stats.avg_txwire, sqrt(r_stats.var_txwire),
-            r_stats.avg_rxpps, sqrt(r_stats.var_rxpps),
-            r_stats.avg_rxbps, sqrt(r_stats.var_rxbps),
-            r_stats.avg_rxwire, sqrt(r_stats.var_rxwire));
 
     free(samples);
 }
