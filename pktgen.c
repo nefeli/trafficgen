@@ -18,7 +18,7 @@ static inline int port_init(uint8_t port, struct pktgen_config *config UNUSED) {
     }
 
     snprintf(name, sizeof(name), "TX%02u:%02u", port, (unsigned)0);
-    struct rte_mempool *tx_mp = rte_pktmbuf_pool_create(name, NUM_PKTS,
+    struct rte_mempool *tx_mp = rte_pktmbuf_pool_create(name, (1<<18) - 1,
             0, 0, RTE_MBUF_DEFAULT_BUF_SIZE, 0);
     if (tx_mp == NULL) {
         rte_exit(EXIT_FAILURE, "Cannot create TX mbuf pool: %s\n", rte_strerror(rte_errno));

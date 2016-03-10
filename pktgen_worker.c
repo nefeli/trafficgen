@@ -267,11 +267,12 @@ static void worker_loop(struct pktgen_config *config) {
 
             r_stats.rx_pkts += nb_rx;
 
-            if (unlikely(tx_head + burst > NUM_PKTS)) {
+            if (unlikely(tx_head + burst >= NUM_PKTS)) {
                 tx_head = 0;
             }
 
             now = get_time_sec();
+            uint32_t lens[burst];
             for (i = 0; i < burst; i++) {
                 if (config->flags & FLAG_GENERATE_ONLINE) {
                     generate_packet(tx_bufs[tx_head + i], config, flow_times, flow_ctrs, now);
@@ -284,6 +285,7 @@ static void worker_loop(struct pktgen_config *config) {
                     *p = now;
                 }
 
+                lens[i] = tx_bufs[tx_head + i]->pkt_len;
                 if (config->flags & FLAG_GENERATE_ONLINE) {
                     rte_prefetch0(rte_pktmbuf_mtod(tx_bufs[(tx_head + i + 1) % NUM_PKTS], void*));
                 }
@@ -292,7 +294,8 @@ static void worker_loop(struct pktgen_config *config) {
             nb_tx = rte_eth_tx_burst(config->port, 0, tx_bufs + tx_head, burst);
 
             for (i = 0; i < nb_tx; i++) {
-                r_stats.tx_bytes += tx_bufs[tx_head + i]->pkt_len;
+                r_stats.tx_bytes += lens[i];
+                tx_bufs[tx_head + i] = rte_pktmbuf_alloc(config->tx_pool);
             }
             r_stats.tx_pkts += nb_tx;
 
