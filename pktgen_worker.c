@@ -96,6 +96,7 @@ static void generate_packet(struct rte_mbuf *buf, struct pktgen_config *config, 
     struct ether_hdr *eth_hdr;
     struct ipv4_hdr *ip_hdr;
     struct udp_hdr *udp_hdr;
+    struct tcp_hdr *tcp_hdr;
     uint16_t pkt_size;
     uint64_t flow;
 
@@ -119,9 +120,10 @@ static void generate_packet(struct rte_mbuf *buf, struct pktgen_config *config, 
     ip_hdr->type_of_service = 0;
     ip_hdr->fragment_offset = 0;
     ip_hdr->time_to_live = 64;
-    ip_hdr->next_proto_id = 17;
+    ip_hdr->next_proto_id = config->proto;
     ip_hdr->packet_id = 0;
     ip_hdr->version_ihl = (1 << 6) + 5;
+    ip_hdr->total_length = rte_cpu_to_be_16(pkt_size - 4 - sizeof(*eth_hdr));
     ip_hdr->hdr_checksum = 0;
 
     flow = 1 + ranval(&config->seed) % config->num_flows;
@@ -139,19 +141,38 @@ static void generate_packet(struct rte_mbuf *buf, struct pktgen_config *config, 
     ip_hdr->total_length = rte_cpu_to_be_16(pkt_size - 4 - sizeof(*eth_hdr));
     ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
 
-    udp_hdr = (struct udp_hdr *)(ip_hdr + 1);
-    udp_hdr->src_port = rte_cpu_to_be_16(1 + (ip_hdr->src_addr % config->udp_min));
-    udp_hdr->dst_port = rte_cpu_to_be_16(1 + (ip_hdr->dst_addr % config->udp_min));
-    udp_hdr->dgram_cksum = 0;
-    udp_hdr->dgram_len = rte_cpu_to_be_16(pkt_size - 4 - sizeof(*eth_hdr) -
-            sizeof(*ip_hdr));
-    uint8_t *p = rte_pktmbuf_mtod_offset(buf, uint8_t *,
-            sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) +
-            sizeof(struct udp_hdr));
-    memset(p, 0, pkt_size - 4 - sizeof(*eth_hdr) - sizeof(*ip_hdr) - sizeof(*udp_hdr) - 1); 
+    uint16_t sport = rte_cpu_to_be_16(ip_hdr->dst_addr % 0x1111);
+    uint16_t dport = rte_cpu_to_be_16((ip_hdr->src_addr % RTE_MAX(config->port_max - config->port_min, 1)) + config->port_min);
+    uint8_t *p;
+    size_t l4s = 0;
+
+    if (config->proto == 17) {
+        udp_hdr = (struct udp_hdr *)(ip_hdr + 1);
+        udp_hdr->src_port = sport;
+        udp_hdr->dst_port = dport;
+        udp_hdr->dgram_cksum = 0;
+        udp_hdr->dgram_len = rte_cpu_to_be_16(pkt_size - 4 - sizeof(*eth_hdr) -
+                sizeof(*ip_hdr));
+        p = rte_pktmbuf_mtod_offset(buf, uint8_t *,
+                sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) +
+                sizeof(struct udp_hdr));
+        l4s = sizeof(struct udp_hdr);
+    } else {
+        tcp_hdr = (struct tcp_hdr *)(ip_hdr + 1);
+        tcp_hdr->src_port = sport;
+        tcp_hdr->dst_port = dport;
+        tcp_hdr->data_off = ((sizeof(struct tcp_hdr) / sizeof(uint32_t)) << 4);
+        tcp_hdr->tcp_flags = (1 << 4);
+        p = rte_pktmbuf_mtod_offset(buf, uint8_t *,
+                sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) +
+                sizeof(struct tcp_hdr));
+        l4s = sizeof(struct tcp_hdr);
+    }
+
+    memset(p, 0, pkt_size - 4 - sizeof(*eth_hdr) - sizeof(*ip_hdr) - l4s - 1);
     if (config->flags & FLAG_RANDOMIZE_PAYLOAD) {
         unsigned r = 0;
-        while (r < pkt_size - 4 - sizeof(*eth_hdr) - sizeof(*ip_hdr) - sizeof(*udp_hdr) - 1) {
+        while (r < pkt_size - 4 - sizeof(*eth_hdr) - sizeof(*ip_hdr) - l4s - 1) {
             p[r] = (uint8_t)ranval(&config->seed);
             r++;
         }

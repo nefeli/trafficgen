@@ -49,6 +49,7 @@
 #include <rte_ether.h>
 #include <rte_ip.h>
 #include <rte_udp.h>
+#include <rte_tcp.h>
 #include <rte_memcpy.h>
 #include <rte_malloc.h>
 
@@ -77,7 +78,10 @@ struct pktgen_config {
     uint32_t num_flows;
     uint32_t ip_src;
     uint32_t ip_min;
-    uint16_t udp_min;
+
+    uint8_t proto;
+    uint16_t port_min;
+    uint16_t port_max;
 
     uint16_t size_min;
     uint16_t size_max;

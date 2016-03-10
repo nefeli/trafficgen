@@ -34,6 +34,10 @@ struct  _Job
   int32_t warmup;
   protobuf_c_boolean has_num_flows;
   int32_t num_flows;
+  protobuf_c_boolean has_port_min;
+  int32_t port_min;
+  protobuf_c_boolean has_port_max;
+  int32_t port_max;
   protobuf_c_boolean has_size_min;
   int32_t size_min;
   protobuf_c_boolean has_size_max;
@@ -52,10 +56,12 @@ struct  _Job
   protobuf_c_boolean stop;
   protobuf_c_boolean has_print;
   protobuf_c_boolean print;
+  protobuf_c_boolean has_tcp;
+  protobuf_c_boolean tcp;
 };
 #define JOB__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&job__descriptor) \
-    , 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0 }
+    , 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0 }
 
 
 /* Job methods */

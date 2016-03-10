@@ -18,7 +18,8 @@ _sym_db = _symbol_database.Default()
 DESCRIPTOR = _descriptor.FileDescriptor(
   name='job.proto',
   package='',
-  serialized_pb=_b('\n\tjob.proto\"\xe4\x01\n\x03Job\x12\x0f\n\x07tx_rate\x18\x01 \x01(\x05\x12\x10\n\x08\x64uration\x18\x02 \x01(\x05\x12\x0e\n\x06warmup\x18\x03 \x01(\x05\x12\x11\n\tnum_flows\x18\x04 \x01(\x05\x12\x10\n\x08size_min\x18\x05 \x01(\x05\x12\x10\n\x08size_max\x18\x06 \x01(\x05\x12\x10\n\x08life_min\x18\x07 \x01(\x02\x12\x10\n\x08life_max\x18\x08 \x01(\x02\x12\x11\n\trandomize\x18\t \x01(\x08\x12\x0f\n\x07latency\x18\n \x01(\x08\x12\x0e\n\x06online\x18\x0b \x01(\x08\x12\x0c\n\x04stop\x18\x0c \x01(\x08\x12\r\n\x05print\x18\r \x01(\x08')
+  syntax='proto2',
+  serialized_pb=_b('\n\tjob.proto\"\x95\x02\n\x03Job\x12\x0f\n\x07tx_rate\x18\x01 \x01(\x05\x12\x10\n\x08\x64uration\x18\x02 \x01(\x05\x12\x0e\n\x06warmup\x18\x03 \x01(\x05\x12\x11\n\tnum_flows\x18\x04 \x01(\x05\x12\x10\n\x08port_min\x18\x05 \x01(\x05\x12\x10\n\x08port_max\x18\x06 \x01(\x05\x12\x10\n\x08size_min\x18\x07 \x01(\x05\x12\x10\n\x08size_max\x18\x08 \x01(\x05\x12\x10\n\x08life_min\x18\t \x01(\x02\x12\x10\n\x08life_max\x18\n \x01(\x02\x12\x11\n\trandomize\x18\x0b \x01(\x08\x12\x0f\n\x07latency\x18\x0c \x01(\x08\x12\x0e\n\x06online\x18\r \x01(\x08\x12\x0c\n\x04stop\x18\x0e \x01(\x08\x12\r\n\x05print\x18\x0f \x01(\x08\x12\x0b\n\x03tcp\x18\x10 \x01(\x08')
 )
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
@@ -61,64 +62,85 @@ _JOB = _descriptor.Descriptor(
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='size_min', full_name='Job.size_min', index=4,
+      name='port_min', full_name='Job.port_min', index=4,
       number=5, type=5, cpp_type=1, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='size_max', full_name='Job.size_max', index=5,
+      name='port_max', full_name='Job.port_max', index=5,
       number=6, type=5, cpp_type=1, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='life_min', full_name='Job.life_min', index=6,
-      number=7, type=2, cpp_type=6, label=1,
+      name='size_min', full_name='Job.size_min', index=6,
+      number=7, type=5, cpp_type=1, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='life_max', full_name='Job.life_max', index=7,
-      number=8, type=2, cpp_type=6, label=1,
+      name='size_max', full_name='Job.size_max', index=7,
+      number=8, type=5, cpp_type=1, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='randomize', full_name='Job.randomize', index=8,
-      number=9, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
+      name='life_min', full_name='Job.life_min', index=8,
+      number=9, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='latency', full_name='Job.latency', index=9,
-      number=10, type=8, cpp_type=7, label=1,
-      has_default_value=False, default_value=False,
+      name='life_max', full_name='Job.life_max', index=9,
+      number=10, type=2, cpp_type=6, label=1,
+      has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='online', full_name='Job.online', index=10,
+      name='randomize', full_name='Job.randomize', index=10,
       number=11, type=8, cpp_type=7, label=1,
       has_default_value=False, default_value=False,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='stop', full_name='Job.stop', index=11,
+      name='latency', full_name='Job.latency', index=11,
       number=12, type=8, cpp_type=7, label=1,
       has_default_value=False, default_value=False,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
     _descriptor.FieldDescriptor(
-      name='print', full_name='Job.print', index=12,
+      name='online', full_name='Job.online', index=12,
       number=13, type=8, cpp_type=7, label=1,
+      has_default_value=False, default_value=False,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='stop', full_name='Job.stop', index=13,
+      number=14, type=8, cpp_type=7, label=1,
+      has_default_value=False, default_value=False,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='print', full_name='Job.print', index=14,
+      number=15, type=8, cpp_type=7, label=1,
+      has_default_value=False, default_value=False,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='tcp', full_name='Job.tcp', index=15,
+      number=16, type=8, cpp_type=7, label=1,
       has_default_value=False, default_value=False,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -131,11 +153,12 @@ _JOB = _descriptor.Descriptor(
   ],
   options=None,
   is_extendable=False,
+  syntax='proto2',
   extension_ranges=[],
   oneofs=[
   ],
   serialized_start=14,
-  serialized_end=242,
+  serialized_end=291,
 )
 
 DESCRIPTOR.message_types_by_name['Job'] = _JOB

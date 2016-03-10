@@ -18,6 +18,7 @@ _sym_db = _symbol_database.Default()
 DESCRIPTOR = _descriptor.FileDescriptor(
   name='status.proto',
   package='',
+  syntax='proto2',
   serialized_pb=_b('\n\x0cstatus.proto\"C\n\x06Status\x12\x1a\n\x04type\x18\x01 \x01(\x0e\x32\x0c.Status.Type\"\x1d\n\x04Type\x12\x08\n\x04\x46\x41IL\x10\x00\x12\x0b\n\x07SUCCESS\x10\x01')
 )
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
@@ -70,6 +71,7 @@ _STATUS = _descriptor.Descriptor(
   ],
   options=None,
   is_extendable=False,
+  syntax='proto2',
   extension_ranges=[],
   oneofs=[
   ],

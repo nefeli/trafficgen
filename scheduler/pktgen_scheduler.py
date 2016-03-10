@@ -16,6 +16,7 @@ import socket
 import logging
 import argparse
 import threading
+import time
 
 import job_pb2
 import status_pb2
@@ -36,6 +37,8 @@ class Q(object):
         self.sock = None
         self.nodes = {}
         self.jobs = []
+        self.thread = None
+        socket.setdefaulttimeout(1)
         if nodes_file:
             self.nodes = self.load_nodes(nodes_file)
         if jobs_file:
@@ -49,7 +52,8 @@ class Q(object):
         logger.info('Starting job scheduler.')
         self.setup_socket()
         self.start_jobs()
-        threading.Thread(target=self.listen).start()
+        self.thread = threading.Thread(target=self.listen)
+        self.thread.start()
 
     def start_jobs(self):
         """
@@ -85,10 +89,13 @@ class Q(object):
         """
         self.sock.listen(backlog)
         logger.info('Currently listening on (%s, %s) for any statuses.' % (str(self.ip), str(self.port)))
-        while True:
-            client_sock, client_addr = self.sock.accept()
-            threading.Thread(target=self.handle_client, 
-                             args=(client_sock, client_addr)).start()
+        while self.sock is not None:
+            try:
+                client_sock, client_addr = self.sock.accept()
+                threading.Thread(target=self.handle_client, 
+                                 args=(client_sock, client_addr)).start()
+            except:
+                pass
 
     def handle_client(self, sock, addr):
         """
@@ -201,6 +208,8 @@ class Q(object):
         """
         if self.sock:
             self.sock.close()
+            self.sock = None
+            self.thread.join()
 
 class Node(object):
     """
@@ -303,8 +312,40 @@ class Job(object):
         """
         return self.job.SerializeToString()
 
-def main():
+def demo(servers, q):
+    """
+    server = [(server_ip,server_port),...]
+    """
+    n = len(servers)
+    try:
+        for i, s in enumerate(servers):
+            q.add_node(Node(str(i), s[0], s[1]))
 
+        for i in range(n):
+            q.add_job(str(i), Job(1, {
+                "tx_rate": 100,
+                "duration": 5,
+                "warmup": 1,
+                "num_flows": 1,
+                "size_min": 768, "size_max": 768,
+                "life_min": 5, "life_max": 5,
+                "port_min": 80, "port_max": 80,
+                "online": True}))
+            time.sleep(10)
+            q.add_job(str(i), Job(2, {
+                "tx_rate": 100,
+                "duration": 5,
+                "warmup": 1,
+                "num_flows": 2,
+                "size_min": 768, "size_max": 768,
+                "life_min": 5, "life_max": 5,
+                "port_min": 443, "port_max": 443,
+                "online": True}))
+    except:
+        for i in range(n):
+            q.add_job(str(i), Job(0, {"stop": True}))
+
+def main():
     q_ip = IP
     q_port = PORT
     q_nodes_file = q_jobs_file = None
@@ -333,31 +374,7 @@ def main():
 
     code.interact(local=dict(globals(), **locals()))
 
-    # this is the equivalent to running 'python ./scheduler/pktgen_scheduler.py -n data/nodes.json -j data/jobs.json'
-    # q = Q(IP, PORT)
-    # q.add_node(Node('m0', '127.0.0.1'))
-    # q.add_job('m0', Job(1, {
-    #                             "m": 20,
-    #                             "t": 30,
-    #                             "w": 5,
-    #                             "n": 15,
-    #                             "s_min": 200,
-    #                             "s_max": 800,
-    #                             "r": True,
-    #                             "l": True
-    #                         }))
-    # q.add_job('m0', Job(2, {
-    #                             "m": 40,
-    #                             "t": 30,
-    #                             "w": 5,
-    #                             "n": 15,
-    #                             "s_min": 500,
-    #                             "s_max": 0,
-    #                             "r": True,
-    #                             "l": False
-    #                         }))    
-    # start the scheduler
-    # q.start()
+    q.stop()
 
 if __name__ == '__main__':
     main()

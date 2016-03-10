@@ -359,6 +359,8 @@ static int response_handler(int fd UNUSED, char *request, int request_bytes, str
     cmd->num_flows = j->num_flows;
     cmd->size_min = j->size_min;
     cmd->size_max = j->size_max;
+    cmd->port_min = j->port_min;
+    cmd->port_max = j->port_max;
     cmd->life_min = j->life_min;
     cmd->life_max = j->life_max;
 
@@ -377,6 +379,11 @@ static int response_handler(int fd UNUSED, char *request, int request_bytes, str
     if (j->print)
         cmd->flags |= FLAG_PRINT;
 
+    if (j->tcp)
+        cmd->proto = 6;
+    else
+        cmd->proto = 17;
+
     if (cmd->life_min >= 0)
         cmd->flags |= FLAG_LIMIT_FLOW_LIFE;
 
@@ -387,6 +394,9 @@ static int response_handler(int fd UNUSED, char *request, int request_bytes, str
            "\tnum_flows: %u\n"
            "\tsize_min: %u\n"
            "\tsize_max: %u\n"
+           "\tproto: %u\n"
+           "\tport_min: %u\n"
+           "\tport_max: %u\n"
            "\tlife_min: %f\n"
            "\tlife_max: %f\n"
            "\tlimit flow life: %d\n"
@@ -397,6 +407,7 @@ static int response_handler(int fd UNUSED, char *request, int request_bytes, str
            "\tprint: %d\n}\n",
            cmd->tx_rate, cmd->warmup, cmd->duration,
            cmd->num_flows, cmd->size_min, cmd->size_max,
+           cmd->proto, cmd->port_min, cmd->port_max,
            cmd->life_min, cmd->life_max,
            cmd->flags & FLAG_LIMIT_FLOW_LIFE,
            cmd->flags & FLAG_RANDOMIZE_PAYLOAD,
@@ -479,6 +490,9 @@ int main(int argc, char *argv[]) {
     ret = read_history(HISTORY_FILE);
     signal(SIGINT, sig_handler);
 
+    cmd.port_min = 0;
+    cmd.port_max = 0;
+    cmd.proto = 17;
     cmd.size_min = 0;
     cmd.size_max = 0;
     cmd.life_min = 0;
@@ -551,7 +565,9 @@ int main(int argc, char *argv[]) {
             config[i].duration = cmd.duration;
             config[i].num_flows = cmd.num_flows;
             config[i].ip_min = 0xAFCD0123;
-            config[i].udp_min = 0x1111;
+            config[i].port_min = cmd.port_min;
+            config[i].port_max = cmd.port_max;
+            config[i].proto = cmd.proto;
             config[i].size_min = cmd.size_min;
             config[i].size_max = cmd.size_max;
             config[i].life_min = cmd.life_min;
