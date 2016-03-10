@@ -50,7 +50,7 @@ void   job__free_unpacked
   assert(message->base.descriptor == &job__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
-static const ProtobufCFieldDescriptor job__field_descriptors[13] =
+static const ProtobufCFieldDescriptor job__field_descriptors[16] =
 {
   {
     "tx_rate",
@@ -101,8 +101,32 @@ static const ProtobufCFieldDescriptor job__field_descriptors[13] =
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
   {
-    "size_min",
+    "port_min",
     5,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_INT32,
+    offsetof(Job, has_port_min),
+    offsetof(Job, port_min),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "port_max",
+    6,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_INT32,
+    offsetof(Job, has_port_max),
+    offsetof(Job, port_max),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "size_min",
+    7,
     PROTOBUF_C_LABEL_OPTIONAL,
     PROTOBUF_C_TYPE_INT32,
     offsetof(Job, has_size_min),
@@ -114,7 +138,7 @@ static const ProtobufCFieldDescriptor job__field_descriptors[13] =
   },
   {
     "size_max",
-    6,
+    8,
     PROTOBUF_C_LABEL_OPTIONAL,
     PROTOBUF_C_TYPE_INT32,
     offsetof(Job, has_size_max),
@@ -126,7 +150,7 @@ static const ProtobufCFieldDescriptor job__field_descriptors[13] =
   },
   {
     "life_min",
-    7,
+    9,
     PROTOBUF_C_LABEL_OPTIONAL,
     PROTOBUF_C_TYPE_FLOAT,
     offsetof(Job, has_life_min),
@@ -138,7 +162,7 @@ static const ProtobufCFieldDescriptor job__field_descriptors[13] =
   },
   {
     "life_max",
-    8,
+    10,
     PROTOBUF_C_LABEL_OPTIONAL,
     PROTOBUF_C_TYPE_FLOAT,
     offsetof(Job, has_life_max),
@@ -150,7 +174,7 @@ static const ProtobufCFieldDescriptor job__field_descriptors[13] =
   },
   {
     "randomize",
-    9,
+    11,
     PROTOBUF_C_LABEL_OPTIONAL,
     PROTOBUF_C_TYPE_BOOL,
     offsetof(Job, has_randomize),
@@ -162,7 +186,7 @@ static const ProtobufCFieldDescriptor job__field_descriptors[13] =
   },
   {
     "latency",
-    10,
+    12,
     PROTOBUF_C_LABEL_OPTIONAL,
     PROTOBUF_C_TYPE_BOOL,
     offsetof(Job, has_latency),
@@ -174,7 +198,7 @@ static const ProtobufCFieldDescriptor job__field_descriptors[13] =
   },
   {
     "online",
-    11,
+    13,
     PROTOBUF_C_LABEL_OPTIONAL,
     PROTOBUF_C_TYPE_BOOL,
     offsetof(Job, has_online),
@@ -186,7 +210,7 @@ static const ProtobufCFieldDescriptor job__field_descriptors[13] =
   },
   {
     "stop",
-    12,
+    14,
     PROTOBUF_C_LABEL_OPTIONAL,
     PROTOBUF_C_TYPE_BOOL,
     offsetof(Job, has_stop),
@@ -198,7 +222,7 @@ static const ProtobufCFieldDescriptor job__field_descriptors[13] =
   },
   {
     "print",
-    13,
+    15,
     PROTOBUF_C_LABEL_OPTIONAL,
     PROTOBUF_C_TYPE_BOOL,
     offsetof(Job, has_print),
@@ -208,26 +232,41 @@ static const ProtobufCFieldDescriptor job__field_descriptors[13] =
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
+  {
+    "tcp",
+    16,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_BOOL,
+    offsetof(Job, has_tcp),
+    offsetof(Job, tcp),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
 };
 static const unsigned job__field_indices_by_name[] = {
   1,   /* field[1] = duration */
-  9,   /* field[9] = latency */
-  7,   /* field[7] = life_max */
-  6,   /* field[6] = life_min */
+  11,   /* field[11] = latency */
+  9,   /* field[9] = life_max */
+  8,   /* field[8] = life_min */
   3,   /* field[3] = num_flows */
-  10,   /* field[10] = online */
-  12,   /* field[12] = print */
-  8,   /* field[8] = randomize */
-  5,   /* field[5] = size_max */
-  4,   /* field[4] = size_min */
-  11,   /* field[11] = stop */
+  12,   /* field[12] = online */
+  5,   /* field[5] = port_max */
+  4,   /* field[4] = port_min */
+  14,   /* field[14] = print */
+  10,   /* field[10] = randomize */
+  7,   /* field[7] = size_max */
+  6,   /* field[6] = size_min */
+  13,   /* field[13] = stop */
+  15,   /* field[15] = tcp */
   0,   /* field[0] = tx_rate */
   2,   /* field[2] = warmup */
 };
 static const ProtobufCIntRange job__number_ranges[1 + 1] =
 {
   { 1, 0 },
-  { 0, 13 }
+  { 0, 16 }
 };
 const ProtobufCMessageDescriptor job__descriptor =
 {
@@ -237,7 +276,7 @@ const ProtobufCMessageDescriptor job__descriptor =
   "Job",
   "",
   sizeof(Job),
-  13,
+  16,
   job__field_descriptors,
   job__field_indices_by_name,
   1,  job__number_ranges,
