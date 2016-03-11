@@ -83,7 +83,7 @@ static int lcore_init(void *arg) {
     config->seed.b = 2;
     config->seed.c = 3;
     config->seed.d = 4;
-    raninit(&config->seed, (u8) get_time_sec());
+    raninit(&config->seed, (u8) get_time_msec());
 
     snprintf(name, sizeof(name), "RX%02u:%02u", port, (unsigned)0);
     config->rx_pool = rte_mempool_lookup(name);
