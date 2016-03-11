@@ -53,7 +53,7 @@ static int double_compare(const void *a, const void *b) {
     return 0;
 }
 
-static double get_time_sec(void) {
-    return rte_get_tsc_cycles() / (double) rte_get_tsc_hz();
+static double get_time_msec(void) {
+    return 1000 * (rte_get_tsc_cycles() / (double) rte_get_tsc_hz());
 }
 #endif

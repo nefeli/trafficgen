@@ -4,8 +4,8 @@ static uint16_t gen_pkt_size(struct pktgen_config *config) {
 }
 
 static void stats(double *start_time, struct rate_stats *r_stats, struct pktgen_config *config) {
-    double now = get_time_sec();
-    double elapsed = now - *start_time;
+    double now = get_time_msec();
+    double elapsed = (now - *start_time) / 1000;
     double tx_bps = (8 * r_stats->tx_bytes)/elapsed;
     double tx_pps = r_stats->tx_pkts/elapsed;
     double rx_bps = (8 * r_stats->rx_bytes)/elapsed;
@@ -194,7 +194,7 @@ static void worker_loop(struct pktgen_config *config) {
     uint32_t nb_tx, nb_rx, tx_head, i, sample_count = 0,
              num_samples = NUM_SAMPLES;
     struct rte_mbuf *rx_bufs[NUM_PKTS];
-    double now, start_time = get_time_sec(),
+    double now, start_time = get_time_msec(),
            *samples = (double*)malloc(2*num_samples * sizeof(double));
     int64_t burst;
     uint64_t total_rx = 0;
@@ -241,14 +241,14 @@ static void worker_loop(struct pktgen_config *config) {
             rte_delay_us(1);
         }
 
-        config->start_time = get_time_sec();
+        config->start_time = get_time_msec();
         tx_head = 0;
-        while (!(config->flags & FLAG_WAIT) && unlikely((now = get_time_sec()) - config->start_time < config->duration)) {
+        while (!(config->flags & FLAG_WAIT) && unlikely((now = get_time_msec()) - config->start_time < config->duration)) {
             if (now - config->start_time > config->warmup) {
                 stats(&start_time, &r_stats, config);
             }
 
-            uint64_t exp_bytes = (now - start_time) * config->tx_rate * 1000000 / 8;
+            uint64_t exp_bytes = ((now - start_time) / 1000) * config->tx_rate * 1000000 / 8;
             int64_t avg_pkt = (r_stats.tx_bytes + 1) / (r_stats.tx_pkts + 1);
             burst = (exp_bytes - r_stats.tx_bytes);
             burst /= avg_pkt;
@@ -277,7 +277,7 @@ static void worker_loop(struct pktgen_config *config) {
                                 sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) +
                                 sizeof(struct udp_hdr));
                         if (*p > 0) {
-                            samples[idx] = now - *p;
+                            samples[idx] = (now - *p) / 1000;
                             sample_count = RTE_MIN(num_samples, sample_count + 1);
                         }
                     }
@@ -292,7 +292,7 @@ static void worker_loop(struct pktgen_config *config) {
                 tx_head = 0;
             }
 
-            now = get_time_sec();
+            now = get_time_msec();
             uint32_t lens[burst];
             for (i = 0; i < burst; i++) {
                 if (config->flags & FLAG_GENERATE_ONLINE) {

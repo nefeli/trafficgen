@@ -324,21 +324,21 @@ def demo(servers, q):
         for i in range(n):
             q.add_job(str(i), Job(1, {
                 "tx_rate": 100,
-                "duration": 5,
-                "warmup": 1,
+                "duration": 5000,
+                "warmup": 1000,
                 "num_flows": 1,
                 "size_min": 768, "size_max": 768,
-                "life_min": 5, "life_max": 5,
+                "life_min": 5000, "life_max": 5000,
                 "port_min": 80, "port_max": 80,
                 "online": True}))
-            time.sleep(10)
+            time.sleep(5)
             q.add_job(str(i), Job(2, {
                 "tx_rate": 100,
-                "duration": 5,
-                "warmup": 1,
+                "duration": 5000,
+                "warmup": 1000,
                 "num_flows": 2,
                 "size_min": 768, "size_max": 768,
-                "life_min": 5, "life_max": 5,
+                "life_min": 5000, "life_max": 5000,
                 "port_min": 443, "port_max": 443,
                 "online": True}))
     except:
