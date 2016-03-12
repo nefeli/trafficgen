@@ -45,6 +45,7 @@ static void stats(double *start_time, struct rate_stats *r_stats, struct pktgen_
     r_stats->var_rxwire += delta * (wire - r_stats->avg_rxwire);
 
     if (elapsed >= 1.0f) {
+	/*printf("tx_pps %.0f rx_pps %.0f\n", tx_pps, rx_pps);*/
         (void)sprintf(config->o_sec, "Core %u: tx_pps: %.0f tx_gbps: %.2f rx_pps: %.0f rx_gbps: %.2f\n",
                 rte_lcore_id(), tx_pps, tx_bps/1000000000.0f,
                 rx_pps, rx_bps / 1000000000.0f);
@@ -126,7 +127,7 @@ static void generate_packet(struct rte_mbuf *buf, struct pktgen_config *config, 
     ip_hdr->total_length = rte_cpu_to_be_16(pkt_size - 4 - sizeof(*eth_hdr));
     ip_hdr->hdr_checksum = 0;
 
-    flow = 1 + ranval(&config->seed) % config->num_flows;
+    flow = config->num_flows > 0 ? 1 + ranval(&config->seed) % config->num_flows : 0;
     if (config->flags & FLAG_LIMIT_FLOW_LIFE &&
         now - flow_times[flow] >= randf(&config->seed, config->life_min, config->life_max)) {
         flow_times[flow] = now;
@@ -258,7 +259,7 @@ static void worker_loop(struct pktgen_config *config) {
             nb_rx = rte_eth_rx_burst(config->port, 0, rx_bufs, config->rx_ring_size);
 
             for (i = 0; i < nb_rx; i++) {
-#if 0
+/*#if 0*/
                 struct ether_addr addr;
                 rte_eth_macaddr_get(config->port, &addr);
                 struct ether_hdr *eth_hdr = rte_pktmbuf_mtod(rx_bufs[i], struct ether_hdr *);
@@ -267,7 +268,7 @@ static void worker_loop(struct pktgen_config *config) {
                     rte_pktmbuf_free(rx_bufs[i]);
                     continue;
                 }
-#endif
+/*#endif*/
 
                 r_stats.rx_bytes += rx_bufs[i]->pkt_len;
                 if (config->flags & FLAG_MEASURE_LATENCY) {
@@ -284,9 +285,10 @@ static void worker_loop(struct pktgen_config *config) {
                     total_rx++;
                 }
                 rte_pktmbuf_free(rx_bufs[i]);
+		r_stats.rx_pkts ++;
             }
 
-            r_stats.rx_pkts += nb_rx;
+            /*r_stats.rx_pkts += nb_rx;*/
 
             if (unlikely(tx_head + burst >= NUM_PKTS)) {
                 tx_head = 0;

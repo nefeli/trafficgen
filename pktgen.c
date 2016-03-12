@@ -11,7 +11,7 @@ static inline int port_init(uint8_t port, struct pktgen_config *config UNUSED) {
     rte_eth_dev_stop(port); 
 
     snprintf(name, sizeof(name), "RX%02u:%02u", port, (unsigned)0);
-    struct rte_mempool *rx_mp = rte_pktmbuf_pool_create(name, GEN_DEFAULT_RX_RING_SIZE,
+    struct rte_mempool *rx_mp = rte_pktmbuf_pool_create(name, (1 << 18) - 1,
             0, 0, RTE_MBUF_DEFAULT_BUF_SIZE, 0);
     if (rx_mp == NULL) {
         rte_exit(EXIT_FAILURE, "Cannot create RX mbuf pool: %s\n", rte_strerror(rte_errno));
@@ -476,12 +476,12 @@ int main(int argc, char *argv[]) {
         if (port == nb_ports) {
             break;
         }
-        memset(&config[i], 0, sizeof(struct pktgen_config));
-        config[i].flags = FLAG_WAIT;
+        memset(&config[core], 0, sizeof(struct pktgen_config));
+        config[core].flags = FLAG_WAIT;
 
-        rte_eal_remote_launch(lcore_init, (void*)&config[i], i);
+        rte_eal_remote_launch(lcore_init, (void*)&config[core], i);
         rte_eal_wait_lcore(i);
-        rte_eal_remote_launch(launch_worker, (void*)&config[i], i);
+        rte_eal_remote_launch(launch_worker, (void*)&config[core], i);
         core++;
         port++;
     }
@@ -560,23 +560,23 @@ int main(int argc, char *argv[]) {
             if (port == nb_ports) {
                 break;
             }
-            config[i].tx_rate = cmd.tx_rate;
-            config[i].warmup = cmd.warmup;
-            config[i].duration = cmd.duration;
-            config[i].num_flows = cmd.num_flows;
-            config[i].ip_min = 0xAFCD0123;
-            config[i].port_min = cmd.port_min;
-            config[i].port_max = cmd.port_max;
-            config[i].proto = cmd.proto;
-            config[i].size_min = cmd.size_min;
-            config[i].size_max = cmd.size_max;
-            config[i].life_min = cmd.life_min;
-            config[i].life_max = cmd.life_max;
-            config[i].port = port_map[core];
-            config[i].rx_ring_size = cmd.rx_ring_size;
-            config[i].tx_ring_size = cmd.tx_ring_size;
-            config[i].flags = cmd.flags;
-            config[i].prefix = cmd.prefix;
+            config[core].tx_rate = cmd.tx_rate;
+            config[core].warmup = cmd.warmup;
+            config[core].duration = cmd.duration;
+            config[core].num_flows = cmd.num_flows;
+            config[core].ip_min = 0xAFCD0123;
+            config[core].port_min = cmd.port_min;
+            config[core].port_max = cmd.port_max;
+            config[core].proto = cmd.proto;
+            config[core].size_min = cmd.size_min;
+            config[core].size_max = cmd.size_max;
+            config[core].life_min = cmd.life_min;
+            config[core].life_max = cmd.life_max;
+            config[core].port = port_map[core];
+            config[core].rx_ring_size = cmd.rx_ring_size;
+            config[core].tx_ring_size = cmd.tx_ring_size;
+            config[core].flags = cmd.flags;
+            config[core].prefix = cmd.prefix;
 #if 0
             printf("config[%u] job: {\n"
                    "\ttx_rate: %u\n"
@@ -594,8 +594,8 @@ int main(int argc, char *argv[]) {
 #endif
 
             if (cmd.flags & FLAG_PRINT) {
-                printf("%s\n", config[i].o_sec);
-                printf("Core %u: Results\n{%s\n    %s}\n", i, config[i].o_delay, config[i].o_xput);
+                printf("%s\n", config[core].o_sec);
+                printf("Core %u: Results\n{%s\n    %s}\n", i, config[core].o_delay, config[core].o_xput);
             }
             core++;
             port++;
