@@ -1,6 +1,7 @@
 #include "pktgen.h"
 #include "pktgen_worker.c"
 
+#define MPOOL_SIZE ((1<<16) - 1)
 static inline int port_init(uint8_t port, struct pktgen_config *config UNUSED) {
     struct rte_eth_conf port_conf = port_conf_default;
     const uint16_t rx_rings = 1, tx_rings = 1;
@@ -11,14 +12,14 @@ static inline int port_init(uint8_t port, struct pktgen_config *config UNUSED) {
     rte_eth_dev_stop(port); 
 
     snprintf(name, sizeof(name), "RX%02u:%02u", port, (unsigned)0);
-    struct rte_mempool *rx_mp = rte_pktmbuf_pool_create(name, (1 << 18) - 1,
+    struct rte_mempool *rx_mp = rte_pktmbuf_pool_create(name, MPOOL_SIZE,
             0, 0, RTE_MBUF_DEFAULT_BUF_SIZE, 0);
     if (rx_mp == NULL) {
         rte_exit(EXIT_FAILURE, "Cannot create RX mbuf pool: %s\n", rte_strerror(rte_errno));
     }
 
     snprintf(name, sizeof(name), "TX%02u:%02u", port, (unsigned)0);
-    struct rte_mempool *tx_mp = rte_pktmbuf_pool_create(name, (1<<18) - 1,
+    struct rte_mempool *tx_mp = rte_pktmbuf_pool_create(name, MPOOL_SIZE,
             0, 0, RTE_MBUF_DEFAULT_BUF_SIZE, 0);
     if (tx_mp == NULL) {
         rte_exit(EXIT_FAILURE, "Cannot create TX mbuf pool: %s\n", rte_strerror(rte_errno));
@@ -301,7 +302,7 @@ static int request_handler(int fd_client, char *request) {
 	return req_len;
 }
 
-static int send_status(int status) {
+static int send_status(int status, int ctrl) {
     char ip[32], port[32];
     strcpy(ip, SCHEDULER_IP);
     strcpy(port, SCHEDULER_PORT);
@@ -320,6 +321,7 @@ static int send_status(int status) {
 	Status s = STATUS__INIT;
 	s.has_type = 1;
 	s.type = status;
+	s.port = ctrl; 
 
 	// get length of serialized data
 	len = status__get_packed_size(&s);
@@ -342,7 +344,7 @@ static int send_status(int status) {
 	return 0;
 }
 
-static int response_handler(int fd UNUSED, char *request, int request_bytes, struct pktgen_config *cmd) {
+static int response_handler(int fd UNUSED, char *request, int request_bytes, struct pktgen_config *cmd, int ctrl) {
 	Job *j = job__unpack(NULL, request_bytes, (void*)request);
 
 	if (j == NULL) {
@@ -420,7 +422,7 @@ static int response_handler(int fd UNUSED, char *request, int request_bytes, str
 	job__free_unpacked(j, NULL);
 	
 	// send success status regardless for now
-	return send_status(STATUS__TYPE__SUCCESS);
+	return send_status(STATUS__TYPE__SUCCESS, ctrl);
 }
 /* end demo stuff */
 
@@ -461,6 +463,7 @@ int main(int argc, char *argv[]) {
 		rte_exit(EXIT_FAILURE, "Failed to create/bind to socket.\n");
 	}
 
+    int control_port = atoi(argv[1]);
     if (listen(fd_server, BACKLOG) == -1) {
         rte_exit(EXIT_FAILURE, "Failed to listen to socket.\n");
     }
@@ -511,11 +514,11 @@ int main(int argc, char *argv[]) {
 	struct sockaddr_storage addr_client;
 
     for (;;) {
-    	socklen_t sin_size = sizeof addr_client;
+        socklen_t sin_size = sizeof addr_client;
         int fd_client = accept(fd_server, (struct sockaddr *)&addr_client, &sin_size);
         if (fd_client >= 0) {
             if ((request_bytes = request_handler(fd_client, request)) > 0) {
-            	if (response_handler(fd_client, request, request_bytes, &cmd) == -1) {
+            	if (response_handler(fd_client, request, request_bytes, &cmd, control_port) == -1) {
             		printf("Failed to respond to request from scheduler.\n");
             	}
 			} else {
