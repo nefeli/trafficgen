@@ -18,7 +18,7 @@ _sym_db = _symbol_database.Default()
 DESCRIPTOR = _descriptor.FileDescriptor(
   name='status.proto',
   package='',
-  serialized_pb=_b('\n\x0cstatus.proto\"C\n\x06Status\x12\x1a\n\x04type\x18\x01 \x01(\x0e\x32\x0c.Status.Type\"\x1d\n\x04Type\x12\x08\n\x04\x46\x41IL\x10\x00\x12\x0b\n\x07SUCCESS\x10\x01')
+  serialized_pb=_b('\n\x0cstatus.proto\"Q\n\x06Status\x12\x0c\n\x04port\x18\x01 \x02(\x05\x12\x1a\n\x04type\x18\x02 \x01(\x0e\x32\x0c.Status.Type\"\x1d\n\x04Type\x12\x08\n\x04\x46\x41IL\x10\x00\x12\x0b\n\x07SUCCESS\x10\x01')
 )
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
@@ -41,8 +41,8 @@ _STATUS_TYPE = _descriptor.EnumDescriptor(
   ],
   containing_type=None,
   options=None,
-  serialized_start=54,
-  serialized_end=83,
+  serialized_start=68,
+  serialized_end=97,
 )
 _sym_db.RegisterEnumDescriptor(_STATUS_TYPE)
 
@@ -55,8 +55,15 @@ _STATUS = _descriptor.Descriptor(
   containing_type=None,
   fields=[
     _descriptor.FieldDescriptor(
-      name='type', full_name='Status.type', index=0,
-      number=1, type=14, cpp_type=8, label=1,
+      name='port', full_name='Status.port', index=0,
+      number=1, type=5, cpp_type=1, label=2,
+      has_default_value=False, default_value=0,
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+    _descriptor.FieldDescriptor(
+      name='type', full_name='Status.type', index=1,
+      number=2, type=14, cpp_type=8, label=1,
       has_default_value=False, default_value=0,
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
@@ -74,7 +81,7 @@ _STATUS = _descriptor.Descriptor(
   oneofs=[
   ],
   serialized_start=16,
-  serialized_end=83,
+  serialized_end=97,
 )
 
 _STATUS.fields_by_name['type'].enum_type = _STATUS_TYPE
