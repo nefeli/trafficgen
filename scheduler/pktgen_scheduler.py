@@ -78,8 +78,9 @@ class Q(object):
     def add_node(self, node):
         """
         """
-        if node.name not in self.nodes and node.ip not in self.nodes:
-            self.nodes[node.name] = self.nodes[node.ip]  = node
+        ip_str = "%s:%d"%(node.ip, node.port)
+        if node.name not in self.nodes and ip_str not in self.nodes:
+            self.nodes[node.name] = self.nodes[ip_str]  = node
         else:
             logger.error('Cannot add node %s as it already exists.' % node.addr())
 
@@ -107,21 +108,22 @@ class Q(object):
         ip = str(addr[0])
         logger.info('Received status from ip %s.' % ip)
 
-        if ip not in self.nodes:
-            logger.error('Ip %s is not one of the nodes' % ip)
-            sock.close()
-            return
-       
         try:
             status = self.read_status(sock)
+            ip_str = '%s:%d'%(ip, status.port)
+            if ip_str not in self.nodes:
+                logger.error('Ip %s is not one of the nodes' % ip_str)
+                sock.close()
+                return
+       
             if status.type == status_pb2.Status.SUCCESS:
-                logger.info('Node %s successfully completed job.' % self.nodes[ip].addr())
-                self.nodes[ip].finish_current_job()
-                self.nodes[ip].next_job()
+                logger.info('Node %s successfully completed job.' % self.nodes[ip_str].addr())
+                self.nodes[ip_str].finish_current_job()
+                self.nodes[ip_str].next_job()
             if status.type == status_pb2.Status.FAIL:
-                logger.info('Node %s successfully completed job.' % self.nodes[ip].addr())
+                logger.info('Node %s successfully completed job.' % self.nodes[ip_str].addr())
         except:
-            logger.info('Failed to read status from node %s' % self.nodes[ip].addr())
+            logger.info('Failed to read status from node %s' % self.nodes[ip_str].addr())
             pass
 
         sock.close()
@@ -424,9 +426,26 @@ def run_demo_job(q, server, rate):
             "online": True
             }))
 
+def sip_traffic(q, server, rate):
+    duration = 3600 * 1000 # If nothing happens in an hour then we should just 
+                           # give up.
+    q.add_job(server, Job(1, {\
+            "tx_rate": rate, \
+            "duration": duration, \
+            "warmup": 0,\
+            "num_flows": 300,\
+            "size_min": 512,\
+            "size_max": 768,\
+            "life_min": 1,\
+            "life_max": 10,\
+            "port_min": 5060,\
+            "port_max": 5061, \
+            "online": True
+            }))
+
 def run_stress(q):
     server = "s"
-    q.add_node(Node(server, "127.0.0.1", 8080))
+    q.add_node(Node(server, "127.0.0.1", 7001))
     while True:
         increase_smoothly(q, server, 20.0, 800.0, 30, 120, 2, 120)
         time.sleep(100)
@@ -452,7 +471,7 @@ def run_demo(q):
     mid = 2000
     ports = 1
     server = "s"
-    q.add_node(Node(server, "127.0.0.1", 8080))
+    q.add_node(Node(server, "127.0.0.1", 7001))
     while True:
         print "Hello welcome to the E2 demo."
         print "Running baseline traffic"
@@ -492,7 +511,7 @@ def run_demo_auto(q):
     mid = 2000
     ports = 1
     server = "s"
-    q.add_node(Node(server, "127.0.0.1", 8080))
+    q.add_node(Node(server, "127.0.0.1", 7001))
     while True:
         print "Hello welcome to the E2 demo."
         print "Running baseline traffic"
@@ -526,6 +545,15 @@ def run_demo_auto(q):
         time.sleep(30)
         print "Thank you"
 
+def demo_console(q):
+    tenant0_pgen = "t0p"
+    q.add_node(Node(tenant0_pgen, "127.0.0.1", 7001))
+    print "adding t0p"
+    tenant1_pgen = "t1p"
+    q.add_node(Node(tenant1_pgen, "127.0.0.1", 7002))
+    print "Adding t1p"
+    code.interact(local=dict(globals(), **locals()))
+
 def main():
     q_ip = IP
     q_port = PORT
@@ -538,6 +566,7 @@ def main():
     parser.add_argument('-n', '--nodes', type=str, help='nodes json file to load')
     parser.add_argument('-j', '--jobs', type=str, help='jobs json file to load')
     parser.add_argument('-i', '--interactive', action="store_true", help='interactive mode')
+    parser.add_argument('-d', '--demo', action="store_true", help='demo mode')
 
     args = parser.parse_args()
 
@@ -552,10 +581,14 @@ def main():
 
     q = Q(q_ip, q_port, q_nodes_file, q_jobs_file)
     q.start()
+    if args.demo:
+        demo_console(q)
+    else:
 
-    code.interact(local=dict(globals(), **locals()))
+        code.interact(local=dict(globals(), **locals()))
 
     q.stop()
+
 
 if __name__ == '__main__':
     main()
