@@ -100,6 +100,7 @@ static void generate_packet(struct rte_mbuf *buf, struct pktgen_config *config, 
     struct tcp_hdr *tcp_hdr;
     uint16_t pkt_size;
     uint64_t flow;
+    uint32_t num_flows = config->num_flows;
 
     struct ether_addr addr;
     rte_eth_macaddr_get(config->port, &addr);
@@ -127,7 +128,7 @@ static void generate_packet(struct rte_mbuf *buf, struct pktgen_config *config, 
     ip_hdr->total_length = rte_cpu_to_be_16(pkt_size - 4 - sizeof(*eth_hdr));
     ip_hdr->hdr_checksum = 0;
 
-    flow = config->num_flows > 0 ? 1 + ranval(&config->seed) % config->num_flows : 0;
+    flow = num_flows > 0 ? 1 + ranval(&config->seed) % num_flows : 0;
     if (config->flags & FLAG_LIMIT_FLOW_LIFE &&
         now - flow_times[flow] >= randf(&config->seed, config->life_min, config->life_max)) {
         flow_times[flow] = now;
@@ -137,8 +138,9 @@ static void generate_packet(struct rte_mbuf *buf, struct pktgen_config *config, 
         flow_ctrs[flow]++;
     }
 
-    ip_hdr->src_addr = rte_cpu_to_be_32((~config->prefix & (flow_ctrs[flow] * flow * config->ip_min / config->num_flows)) | config->prefix);
-    ip_hdr->dst_addr = rte_cpu_to_be_32((~config->prefix & (flow_ctrs[flow] * (flow ^ GEN_KEY) * config->ip_min / config->num_flows)) | config->prefix);
+    ip_hdr->src_addr = rte_cpu_to_be_32((~config->prefix & (flow_ctrs[flow] * flow * config->ip_min)) | config->prefix);
+    ip_hdr->dst_addr = rte_cpu_to_be_32((~config->prefix & (flow_ctrs[flow] * (flow ^ GEN_KEY) * config->ip_min)) | config->prefix);
+
     ip_hdr->total_length = rte_cpu_to_be_16(pkt_size - 4 - sizeof(*eth_hdr));
     ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
 
