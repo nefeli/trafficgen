@@ -55,6 +55,7 @@
 
 #define NUM_PKTS 32
 #define BURST_SIZE 32
+#define MAX_PKT_SIZE 2048
 #define GEN_KEY 0x1234
 #define GEN_DEFAULT_RX_RING_SIZE 256
 #define GEN_DEFAULT_TX_RING_SIZE 256
@@ -106,6 +107,18 @@ struct pktgen_config {
     char o_sec[1024];
 
     ranctx seed;
+};
+
+struct pkt {
+    uint16_t size;
+
+    struct ether_hdr eth_hdr;
+    struct ipv4_hdr ip_hdr;
+    union {
+        struct udp_hdr udp_hdr;
+        struct tcp_hdr tcp_hdr;
+    };
+    uint8_t data[2048];
 };
 
 struct rate_stats {
