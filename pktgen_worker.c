@@ -194,6 +194,7 @@ static void generate_traffic(struct rte_mbuf **tx_bufs, struct pktgen_config *co
 #define NUM_SAMPLES (10000)
 static void worker_loop(struct pktgen_config *config) {
     struct rte_mbuf *tx_bufs[NUM_PKTS];
+    struct rte_mempool *tx_pool = config->tx_pool;
     uint32_t nb_tx, nb_rx, tx_head, i, sample_count = 0,
              num_samples = NUM_SAMPLES;
     struct rte_mbuf *rx_bufs[NUM_PKTS];
@@ -267,7 +268,6 @@ static void worker_loop(struct pktgen_config *config) {
                 struct ether_hdr *eth_hdr = rte_pktmbuf_mtod(rx_bufs[i], struct ether_hdr *);
 
                 if (!is_same_ether_addr(&addr, &eth_hdr->d_addr)) {
-                    rte_pktmbuf_free(rx_bufs[i]);
                     continue;
                 }
 /*#endif*/
@@ -286,9 +286,13 @@ static void worker_loop(struct pktgen_config *config) {
                     }
                     total_rx++;
                 }
-                rte_pktmbuf_free(rx_bufs[i]);
-		r_stats.rx_pkts ++;
+                r_stats.rx_pkts ++;
             }
+
+            if (likely(nb_rx > 0)) {
+                mbuf_free_bulk(rx_bufs, nb_rx);
+            }
+            
 
             /*r_stats.rx_pkts += nb_rx;*/
 
@@ -298,6 +302,10 @@ static void worker_loop(struct pktgen_config *config) {
 
             now = get_time_msec();
             uint32_t lens[burst];
+            if (mbuf_alloc_bulk(tx_pool, tx_bufs, 1600, burst) != 0) {
+                continue;
+            }
+
             for (i = 0; i < burst; i++) {
                 if (config->flags & FLAG_GENERATE_ONLINE) {
                     generate_packet(tx_bufs[tx_head + i], config, flow_times, flow_ctrs, now);
@@ -311,16 +319,12 @@ static void worker_loop(struct pktgen_config *config) {
                 }
 
                 lens[i] = tx_bufs[tx_head + i]->pkt_len;
-                if (config->flags & FLAG_GENERATE_ONLINE) {
-                    rte_prefetch0(rte_pktmbuf_mtod(tx_bufs[(tx_head + i + 1) % NUM_PKTS], void*));
-                }
             }
 
             nb_tx = rte_eth_tx_burst(config->port, 0, tx_bufs + tx_head, burst);
 
             for (i = 0; i < nb_tx; i++) {
                 r_stats.tx_bytes += lens[i];
-                tx_bufs[tx_head + i] = rte_pktmbuf_alloc(config->tx_pool);
             }
             r_stats.tx_pkts += nb_tx;
 

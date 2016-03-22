@@ -25,6 +25,10 @@ static inline int port_init(uint8_t port, struct pktgen_config *config UNUSED) {
         rte_exit(EXIT_FAILURE, "Cannot create TX mbuf pool: %s\n", rte_strerror(rte_errno));
     }
 
+    struct rte_mbuf *mbuf = rte_pktmbuf_alloc(tx_mp);
+    tx_mbuf_template[0] = *mbuf;
+    rte_pktmbuf_free(mbuf);
+
     if (port >= rte_eth_dev_count()) {
         return -1;
     }
