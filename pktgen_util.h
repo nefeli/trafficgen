@@ -12,35 +12,22 @@
 #define HISTORY_FILE "./.pktgen_history"
 #define RTE_MBUF_FROM_BADDR(ba)     (((struct rte_mbuf *)(ba)) - 1)
 
-typedef unsigned long long u8;
-typedef struct ranctx { u8 a; u8 b; u8 c; u8 d; } ranctx;
 typedef struct rte_mbuf** mbuf_array_t;
 
 struct rte_mbuf tx_mbuf_template[RTE_MAX_LCORE];
 
-/* smallprng
- * source: http://burtleburtle.net/bob/rand/smallprng.html
+/* Stolen from BESS
+ * https://github.com/NetSys/bess/blob/develop/core/utils/random.h
  */
-#define rot2(x,k) (((x)<<(k))|((x)>>(64-(k))))
-static u8 ranval( ranctx *x ) {
-    u8 e = x->a - rot2(x->b, 7);
-    x->a = x->b ^ rot2(x->c, 13);
-    x->b = x->c + rot2(x->d, 37);
-    x->c = x->d + e;
-    x->d = e + x->a;
-    return x->d;
+static inline uint32_t rand_fast(uint64_t *seed) {
+	uint64_t next_seed;
+	next_seed = *seed * 1103515245 + 12345;
+	*seed = next_seed;
+	return next_seed >> 32;
 }
 
-static double randf (ranctx *x, double low, double high) {
-    return low + (float)ranval(x)/((double)(UINT64_MAX/(high-low)));
-}
-
-static void raninit( ranctx *x, u8 seed ) {
-    u8 i;
-    x->a = 0xf1ea5eed, x->b = x->c = x->d = seed;
-    for (i=0; i<20; ++i) {
-        (void)ranval(x);
-    }
+static double randf (uint64_t *x, double low, double high) {
+    return low + (float)rand_fast(x)/((double)(UINT64_MAX/(high-low)));
 }
 
 /* Misc. */

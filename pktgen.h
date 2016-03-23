@@ -56,14 +56,19 @@
 #define NUM_PKTS 32
 #define BURST_SIZE 32
 #define MAX_PKT_SIZE 2048
+#define MPOOL_SIZE ((1<<16) - 1)
+
 #define GEN_KEY 0x1234
+#define GEN_DEFAULT_SEED 1234
 #define GEN_DEFAULT_RX_RING_SIZE 256
 #define GEN_DEFAULT_TX_RING_SIZE 256
+
 #define ETH_PREAMBLE 7
 #define ETH_START_OF_FRAME 1
 #define ETH_FCS 4
 #define ETH_GAP 12
 #define ETH_OVERHEAD (ETH_PREAMBLE + ETH_START_OF_FRAME + ETH_FCS + ETH_GAP)
+
 
 #define FLAG_MEASURE_LATENCY 1
 #define FLAG_RANDOMIZE_PAYLOAD (1<<1)
@@ -111,7 +116,7 @@ struct pktgen_config {
     char o_xput[1024];
     char o_sec[1024];
 
-    ranctx seed;
+    uint64_t seed;
 };
 
 struct pkt {
