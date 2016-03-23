@@ -170,12 +170,11 @@ static void generate_packet(struct pkt *buf, struct pktgen_config *config, doubl
 
 #define NUM_SAMPLES (10000)
 static void worker_loop(struct pktgen_config *config) {
-    struct rte_mbuf *tx_bufs[NUM_PKTS];
     struct pkt tx_burst[NUM_PKTS];
     struct rte_mempool *tx_pool = config->tx_pool;
     uint32_t nb_tx, nb_rx, i, sample_count = 0,
              num_samples = NUM_SAMPLES;
-    struct rte_mbuf *rx_bufs[NUM_PKTS];
+    struct rte_mbuf *bufs[NUM_PKTS];
     double now, start_time = get_time_msec(),
            *samples = (double*)malloc(2*num_samples * sizeof(double));
     int64_t burst;
@@ -209,9 +208,9 @@ static void worker_loop(struct pktgen_config *config) {
     /* Flush the RX queue */
     printf("Core %u: Flusing port %u RX queue\n", rte_lcore_id(), config->port);
     while (rte_eth_rx_queue_count(config->port, 0) > 0) {
-        nb_rx = rte_eth_rx_burst(config->port, 0, rx_bufs, config->rx_ring_size);
+        nb_rx = rte_eth_rx_burst(config->port, 0, bufs, config->rx_ring_size);
         for (i = 0; i < nb_rx; i++) {
-            rte_pktmbuf_free(rx_bufs[i]);
+            rte_pktmbuf_free(bufs[i]);
         }
         rte_delay_us(10);
     }
@@ -234,24 +233,24 @@ static void worker_loop(struct pktgen_config *config) {
             burst = RTE_MIN(burst, (unsigned)BURST_SIZE);
             burst = RTE_MAX((unsigned)0, burst);
 
-            nb_rx = rte_eth_rx_burst(config->port, 0, rx_bufs, config->rx_ring_size);
+            nb_rx = rte_eth_rx_burst(config->port, 0, bufs, BURST_SIZE);
 
             for (i = 0; i < nb_rx; i++) {
-/*#if 0*/
+#if 0
                 struct ether_addr addr;
                 rte_eth_macaddr_get(config->port, &addr);
-                struct ether_hdr *eth_hdr = rte_pktmbuf_mtod(rx_bufs[i], struct ether_hdr *);
+                struct ether_hdr *eth_hdr = rte_pktmbuf_mtod(bufs[i], struct ether_hdr *);
 
                 if (!is_same_ether_addr(&addr, &eth_hdr->d_addr)) {
                     continue;
                 }
-/*#endif*/
+#endif
 
-                r_stats.rx_bytes += rx_bufs[i]->pkt_len;
+                r_stats.rx_bytes += bufs[i]->pkt_len;
                 if (config->flags & FLAG_MEASURE_LATENCY) {
                     uint64_t idx = 0;
                     if ((idx = total_rx) < num_samples || (idx = ranval(&config->seed) % total_rx) < num_samples)  {
-                        double *p = rte_pktmbuf_mtod_offset(rx_bufs[i], double *,
+                        double *p = rte_pktmbuf_mtod_offset(bufs[i], double *,
                                 sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) +
                                 sizeof(struct udp_hdr));
                         if (*p > 0) {
@@ -264,13 +263,10 @@ static void worker_loop(struct pktgen_config *config) {
                 r_stats.rx_pkts ++;
             }
 
-            if (likely(nb_rx > 0)) {
-                mbuf_free_bulk(rx_bufs, nb_rx);
-            }
-            
             now = get_time_msec();
             uint32_t lens[burst];
-            if (mbuf_alloc_bulk(tx_pool, tx_bufs, MAX_PKT_SIZE, burst) != 0) {
+            if (unlikely(nb_rx < burst &&
+                mbuf_alloc_bulk(tx_pool, bufs + nb_rx, MAX_PKT_SIZE, burst - nb_rx) != 0)) {
                 continue;
             }
 
@@ -280,7 +276,7 @@ static void worker_loop(struct pktgen_config *config) {
                 tx_burst[i].size = pkt_size + 24;
                 generate_packet(&tx_burst[i], config, flow_times, flow_ctrs, now);
 
-                struct rte_mbuf *buf = tx_bufs[i];
+                struct rte_mbuf *buf = bufs[i];
                 buf->pkt_len = pkt_size - 4;
                 buf->data_len = pkt_size - 4;
                 buf->nb_segs = 1;
@@ -288,19 +284,23 @@ static void worker_loop(struct pktgen_config *config) {
                         &tx_burst[i] + sizeof(uint16_t), pkt_size);
 
                 if (config->flags & FLAG_MEASURE_LATENCY) {
-                    double *p = rte_pktmbuf_mtod_offset(tx_bufs[i], double *,
+                    double *p = rte_pktmbuf_mtod_offset(bufs[i], double *,
                             sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) +
                             sizeof(struct udp_hdr));
                     *p = now;
                 }
             }
 
-            nb_tx = rte_eth_tx_burst(config->port, 0, tx_bufs, burst);
+            nb_tx = rte_eth_tx_burst(config->port, 0, bufs, burst);
 
             for (i = 0; i < nb_tx; i++) {
                 r_stats.tx_bytes += lens[i];
             }
             r_stats.tx_pkts += nb_tx;
+
+            if (unlikely(burst < nb_rx)) {
+                mbuf_free_bulk(bufs + burst, nb_rx - burst);
+            }
         }
 
         if (r_stats.n > 0 && sample_count > 0) {
@@ -336,8 +336,7 @@ static void worker_loop(struct pktgen_config *config) {
     rte_delay_us(100);
 
     for (i = 0; i < NUM_PKTS; i++) {
-        rte_pktmbuf_free(tx_bufs[i]);
-        rte_pktmbuf_free(rx_bufs[i]);
+        rte_pktmbuf_free(bufs[i]);
     }
 
     free(samples);
