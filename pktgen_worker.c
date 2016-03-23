@@ -246,7 +246,7 @@ static void worker_loop(struct pktgen_config *config) {
                 }
 #endif
 
-                r_stats.rx_bytes += bufs[i]->pkt_len;
+                r_stats.rx_bytes += bufs[i]->pkt_len + ETH_OVERHEAD;
                 if (config->flags & FLAG_MEASURE_LATENCY) {
                     uint64_t idx = 0;
                     if ((idx = total_rx) < num_samples || (idx = ranval(&config->seed) % total_rx) < num_samples)  {
@@ -272,8 +272,8 @@ static void worker_loop(struct pktgen_config *config) {
 
             for (i = 0; i < burst; i++) {
                 uint16_t pkt_size = gen_pkt_size(config);
-                lens[i] = pkt_size;
-                tx_burst[i].size = pkt_size + 24;
+                lens[i] = pkt_size + ETH_OVERHEAD;
+                tx_burst[i].size = pkt_size;
                 generate_packet(&tx_burst[i], config, flow_times, flow_ctrs, now);
 
                 struct rte_mbuf *buf = bufs[i];
