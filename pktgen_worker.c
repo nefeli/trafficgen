@@ -1,5 +1,5 @@
 static uint16_t gen_pkt_size(struct pktgen_config *config) {
-    return (uint16_t) ranval(&config->seed) % (RTE_MAX(config->size_max - config->size_min, 1)) +
+    return (uint16_t) rand_fast(&config->seed) % (RTE_MAX(config->size_max - config->size_min, 1)) +
         config->size_min;
 }
 
@@ -121,7 +121,7 @@ static void generate_packet(struct pkt *buf, struct pktgen_config *config, doubl
     ip_hdr->total_length = rte_cpu_to_be_16(pkt_size - 4 - sizeof(*eth_hdr));
     ip_hdr->hdr_checksum = 0;
 
-    flow = num_flows > 0 ? 1 + ranval(&config->seed) % num_flows : 0;
+    flow = num_flows > 0 ? 1 + rand_fast(&config->seed) % num_flows : 0;
     if (config->flags & FLAG_LIMIT_FLOW_LIFE &&
         now - flow_times[flow] >= randf(&config->seed, config->life_min, config->life_max)) {
         flow_times[flow] = now;
@@ -162,7 +162,7 @@ static void generate_packet(struct pkt *buf, struct pktgen_config *config, doubl
     if (config->flags & FLAG_RANDOMIZE_PAYLOAD) {
         unsigned r = 0;
         while (r < pkt_size - 4 - sizeof(*eth_hdr) - sizeof(*ip_hdr) - l4s - 1) {
-            buf->data[r] = (uint8_t)ranval(&config->seed);
+            buf->data[r] = (uint8_t)rand_fast(&config->seed);
             r++;
         }
     }
@@ -249,7 +249,7 @@ static void worker_loop(struct pktgen_config *config) {
                 r_stats.rx_bytes += bufs[i]->pkt_len + ETH_OVERHEAD;
                 if (config->flags & FLAG_MEASURE_LATENCY) {
                     uint64_t idx = 0;
-                    if ((idx = total_rx) < num_samples || (idx = ranval(&config->seed) % total_rx) < num_samples)  {
+                    if ((idx = total_rx) < num_samples || (idx = rand_fast(&config->seed) % total_rx) < num_samples)  {
                         double *p = rte_pktmbuf_mtod_offset(bufs[i], double *,
                                 sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) +
                                 sizeof(struct udp_hdr));

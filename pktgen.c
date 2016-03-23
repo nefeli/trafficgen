@@ -1,7 +1,6 @@
 #include "pktgen.h"
 #include "pktgen_worker.c"
 
-#define MPOOL_SIZE ((1<<16) - 1)
 static inline int port_init(uint8_t port, struct pktgen_config *config UNUSED) {
     struct rte_eth_conf port_conf = port_conf_default;
     const uint16_t rx_rings = 1, tx_rings = 1;
@@ -84,11 +83,7 @@ static int lcore_init(void *arg) {
 
     printf("Init core %d\n", rte_lcore_id());
 
-    config->seed.a = 1;
-    config->seed.b = 2;
-    config->seed.c = 3;
-    config->seed.d = 4;
-    raninit(&config->seed, (u8) get_time_msec());
+    config->seed = GEN_DEFAULT_SEED;
 
     snprintf(name, sizeof(name), "RX%02u:%02u", port, (unsigned)0);
     config->rx_pool = rte_mempool_lookup(name);
