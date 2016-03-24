@@ -281,7 +281,7 @@ static void worker_loop(struct pktgen_config *config) {
                 buf->data_len = pkt_size - 4;
                 buf->nb_segs = 1;
                 rte_memcpy((uint8_t*)buf->buf_addr + buf->data_off,
-                        &tx_burst[i] + sizeof(uint16_t), pkt_size);
+                        (uint8_t*)&tx_burst[i] + sizeof(uint16_t), pkt_size);
 
                 if (config->flags & FLAG_MEASURE_LATENCY) {
                     double *p = rte_pktmbuf_mtod_offset(bufs[i], double *,
