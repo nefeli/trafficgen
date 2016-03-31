@@ -78,6 +78,40 @@
 #define FLAG_UPDATE (1<<5)
 #define FLAG_PRINT (1<<6)
 
+struct rate_stats {
+    uint64_t n;
+    uint64_t rtt_n;
+
+    double avg_rxpps;
+    double var_rxpps;
+    double avg_rxbps;
+    double var_rxbps;
+    double avg_txpps;
+    double var_txpps;
+    double avg_txbps;
+    double var_txbps;
+    double avg_txwire;
+    double var_txwire;
+    double avg_rxwire;
+    double var_rxwire;
+
+    double rtt_avg;
+    double rtt_std;
+    double rtt_0;
+    double rtt_25;
+    double rtt_50;
+    double rtt_75;
+    double rtt_90;
+    double rtt_95;
+    double rtt_99;
+    double rtt_100;
+
+    uint64_t tx_bytes;
+    uint64_t tx_pkts;
+    uint64_t rx_bytes;
+    uint64_t rx_pkts;
+};
+
 struct pktgen_config {
     uint8_t port;
     uint8_t role;
@@ -117,6 +151,7 @@ struct pktgen_config {
     char o_sec[1024];
 
     uint64_t seed;
+    struct rate_stats stats;
 };
 
 struct pkt {
@@ -129,28 +164,6 @@ struct pkt {
         struct tcp_hdr tcp_hdr;
     };
     uint8_t data[2048];
-};
-
-struct rate_stats {
-    uint64_t n;
-
-    double avg_rxpps;
-    double var_rxpps;
-    double avg_rxbps;
-    double var_rxbps;
-    double avg_txpps;
-    double var_txpps;
-    double avg_txbps;
-    double var_txbps;
-    double avg_txwire;
-    double var_txwire;
-    double avg_rxwire;
-    double var_rxwire;
-
-    uint64_t tx_bytes;
-    uint64_t tx_pkts;
-    uint64_t rx_bytes;
-    uint64_t rx_pkts;
 };
 
 static const struct rte_eth_conf port_conf_default = {

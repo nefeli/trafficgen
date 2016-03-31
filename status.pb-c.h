@@ -15,6 +15,7 @@ PROTOBUF_C__BEGIN_DECLS
 #endif
 
 
+typedef struct _PortStats PortStats;
 typedef struct _Status Status;
 
 
@@ -22,11 +23,50 @@ typedef struct _Status Status;
 
 typedef enum _Status__Type {
   STATUS__TYPE__FAIL = 0,
-  STATUS__TYPE__SUCCESS = 1
+  STATUS__TYPE__SUCCESS = 1,
+  STATUS__TYPE__STATS = 2
     PROTOBUF_C__FORCE_ENUM_TO_BE_INT_SIZE(STATUS__TYPE)
 } Status__Type;
 
 /* --- messages --- */
+
+struct  _PortStats
+{
+  ProtobufCMessage base;
+  uint64_t n;
+  uint64_t n_rtt;
+  uint64_t port;
+  double avg_rxmpps;
+  double std_rxmpps;
+  double avg_rxbps;
+  double std_rxbps;
+  double avg_txmpps;
+  double std_txmpps;
+  double avg_txbps;
+  double std_txbps;
+  double avg_txwire;
+  double std_txwire;
+  double avg_rxwire;
+  double std_rxwire;
+  double rtt_avg;
+  double rtt_std;
+  double rtt_0;
+  double rtt_25;
+  double rtt_50;
+  double rtt_75;
+  double rtt_90;
+  double rtt_95;
+  double rtt_99;
+  double rtt_100;
+  uint64_t tx_bytes;
+  uint64_t tx_pkts;
+  uint64_t rx_bytes;
+  uint64_t rx_pkts;
+};
+#define PORT_STATS__INIT \
+ { PROTOBUF_C_MESSAGE_INIT (&port_stats__descriptor) \
+    , 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
+
 
 struct  _Status
 {
@@ -34,12 +74,33 @@ struct  _Status
   int32_t port;
   protobuf_c_boolean has_type;
   Status__Type type;
+  size_t n_stats;
+  PortStats **stats;
 };
 #define STATUS__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&status__descriptor) \
-    , 0, 0,0 }
+    , 0, 0,0, 0,NULL }
 
 
+/* PortStats methods */
+void   port_stats__init
+                     (PortStats         *message);
+size_t port_stats__get_packed_size
+                     (const PortStats   *message);
+size_t port_stats__pack
+                     (const PortStats   *message,
+                      uint8_t             *out);
+size_t port_stats__pack_to_buffer
+                     (const PortStats   *message,
+                      ProtobufCBuffer     *buffer);
+PortStats *
+       port_stats__unpack
+                     (ProtobufCAllocator  *allocator,
+                      size_t               len,
+                      const uint8_t       *data);
+void   port_stats__free_unpacked
+                     (PortStats *message,
+                      ProtobufCAllocator *allocator);
 /* Status methods */
 void   status__init
                      (Status         *message);
@@ -61,6 +122,9 @@ void   status__free_unpacked
                       ProtobufCAllocator *allocator);
 /* --- per-message closures --- */
 
+typedef void (*PortStats_Closure)
+                 (const PortStats *message,
+                  void *closure_data);
 typedef void (*Status_Closure)
                  (const Status *message,
                   void *closure_data);
@@ -70,6 +134,7 @@ typedef void (*Status_Closure)
 
 /* --- descriptors --- */
 
+extern const ProtobufCMessageDescriptor port_stats__descriptor;
 extern const ProtobufCMessageDescriptor status__descriptor;
 extern const ProtobufCEnumDescriptor    status__type__descriptor;
 

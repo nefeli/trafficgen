@@ -231,7 +231,33 @@ def demo_console(q):
     q.add_node(Node(tenant1_pgen, "127.0.0.1", 7002))
     print "Adding t1p"
     code.interact(local=dict(globals(), **locals()))
+    
+def run(q):
+    servers = [("127.0.0.1", 5000)]
+    n = len(servers)
+    try:
+        for i, s in enumerate(servers):
+            q.add_node(Node(str(i), s[0], s[1]))
 
+        for i in range(n):
+            q.add_job(str(i), Job(1, {
+                "tx_rate": 10000,
+                "duration": 10000,
+                "warmup": 0,
+                "num_flows": 10,
+                "size_min": 768, "size_max": 768,
+                "life_min": 1000, "life_max": 2000,
+                "port_min": 80, "port_max": 80,
+                "latency": True,
+                "online": True}))
+            time.sleep(10)
+            q.add_job(str(i), Job(1, {
+                "print": True,
+                "stop": True}))
+
+    except:
+        for i in range(n):
+            q.add_job(str(i), Job(0, {"stop": True}))
 def main():
     q_ip = IP
     q_port = PORT

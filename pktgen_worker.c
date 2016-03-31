@@ -1,9 +1,14 @@
-static uint16_t gen_pkt_size(struct pktgen_config *config) {
+static uint16_t 
+gen_pkt_size(struct pktgen_config *config)
+{
     return (uint16_t) rand_fast(&config->seed) % (RTE_MAX(config->size_max - config->size_min, 1)) +
         config->size_min;
 }
 
-static void stats(double *start_time, struct rate_stats *r_stats, struct pktgen_config *config) {
+static void
+stats(double *start_time, struct rate_stats *r_stats,
+      struct pktgen_config *config)
+{
     double now = get_time_msec();
     double elapsed = (now - *start_time) / 1000;
     double tx_bps = (8 * r_stats->tx_bytes)/elapsed;
@@ -57,8 +62,9 @@ static void stats(double *start_time, struct rate_stats *r_stats, struct pktgen_
     }
 }
 
-static void latency_calc(double *samples, uint32_t sample_count, struct pktgen_config *config) {
-    (void)strncpy(config->o_delay, "%s", 2);
+static void
+latency_calc(double *samples, uint32_t sample_count, struct rate_stats *r_stats)
+{
     qsort(samples, sample_count, sizeof(samples[0]), double_compare);
     uint32_t i, j = 0;
     double labels[8] = {0.0f, 0.25f, 0.5f, 0.75f, 0.9f, 0.95f, 0.99f, 1.0f};
@@ -76,24 +82,24 @@ static void latency_calc(double *samples, uint32_t sample_count, struct pktgen_c
     }
 
     var /= sample_count - 1;
-    sprintf(config->o_delay,
-            "\"rtt_samples\": %u,"
-            "\"rtt_mean\": %.2f,"
-            "\"rtt_std\": %.2f,"
-            "\"rtt_0\": %.2f,"
-            "\"rtt_25\": %.2f,"
-            "\"rtt_50\": %.2f,"
-            "\"rtt_75\": %.2f,"
-            "\"rtt_90\": %.2f,"
-            "\"rtt_95\": %.2f,"
-            "\"rtt_99\": %.2f,"
-            "\"rtt_100\": %.2f,",
-            sample_count, mean, sqrt(var),
-            vals[0], vals[1], vals[2], vals[3],
-            vals[4], vals[5], vals[6], vals[7]);
+
+    r_stats->rtt_n = sample_count;
+    r_stats->rtt_avg = mean;
+    r_stats->rtt_std = sqrt(var);
+    r_stats->rtt_0 = vals[0];
+    r_stats->rtt_25 = vals[1];
+    r_stats->rtt_50 = vals[2];
+    r_stats->rtt_75 = vals[3];
+    r_stats->rtt_90 = vals[4];
+    r_stats->rtt_95 = vals[5];
+    r_stats->rtt_99 = vals[6];
+    r_stats->rtt_100 = vals[7];
 }
 
-static void generate_packet(struct pkt *buf, struct pktgen_config *config, double *flow_times, uint16_t *flow_ctrs, double now) {
+static void
+generate_packet(struct pkt *buf, struct pktgen_config *config,
+                double *flow_times, uint16_t *flow_ctrs, double now)
+{
     struct ether_hdr *eth_hdr;
     struct ipv4_hdr *ip_hdr;
     struct udp_hdr *udp_hdr;
@@ -168,8 +174,10 @@ static void generate_packet(struct pkt *buf, struct pktgen_config *config, doubl
     }
 }
 
-#define NUM_SAMPLES (10000)
-static void worker_loop(struct pktgen_config *config) {
+#define NUM_SAMPLES (100000)
+static void
+worker_loop(struct pktgen_config *config)
+{
     struct pkt tx_burst[NUM_PKTS];
     struct rte_mempool *tx_pool = config->tx_pool;
     uint32_t nb_tx, nb_rx, i, sample_count = 0,
@@ -221,7 +229,9 @@ static void worker_loop(struct pktgen_config *config) {
         }
 
         config->start_time = get_time_msec();
-        while (!(config->flags & FLAG_WAIT) && unlikely((now = get_time_msec()) - config->start_time < config->duration)) {
+        while (!(config->flags & FLAG_WAIT) &&
+               unlikely((now = get_time_msec()) -
+               config->start_time < config->duration)) {
             if (now - config->start_time > config->warmup) {
                 stats(&start_time, &r_stats, config);
             }
@@ -249,7 +259,8 @@ static void worker_loop(struct pktgen_config *config) {
                 r_stats.rx_bytes += bufs[i]->pkt_len + ETH_OVERHEAD;
                 if (config->flags & FLAG_MEASURE_LATENCY) {
                     uint64_t idx = 0;
-                    if ((idx = total_rx) < num_samples || (idx = rand_fast(&config->seed) % total_rx) < num_samples)  {
+                    if ((idx = total_rx) < num_samples ||
+                        (idx = rand_fast(&config->seed) % total_rx) < num_samples)  {
                         double *p = rte_pktmbuf_mtod_offset(bufs[i], double *,
                                 sizeof(struct ether_hdr) + sizeof(struct ipv4_hdr) +
                                 sizeof(struct udp_hdr));
@@ -308,27 +319,9 @@ static void worker_loop(struct pktgen_config *config) {
             r_stats.var_txbps /= (r_stats.n - 1); r_stats.var_rxbps /= (r_stats.n - 1);
             r_stats.var_txwire /= (r_stats.n - 1); r_stats.var_rxwire /= (r_stats.n - 1);
 
-            latency_calc(samples, sample_count, config);
-            (void)sprintf(config->o_xput,
-                    "\"tx_mpps_mean\": %9.6f,"
-                    "\"tx_mpps_std\": %9.6f,"
-                    "\"tx_mbps_mean\": %9.6f,"
-                    "\"tx_mbps_std\": %9.6f,"
-                    "\"tx_wire_mean\": %9.6f,"
-                    "\"tx_wire_std\": %9.6f,\n    "
-                    "\"rx_mpps_mean\": %9.6f,"
-                    "\"rx_mpps_std\": %9.6f,"
-                    "\"rx_mbps_mean\": %9.6f,"
-                    "\"rx_mbps_std\": %9.6f,"
-                    "\"rx_wire_mean\": %9.6f,"
-                    "\"rx_wire_std\": %9.6f",
-                    r_stats.avg_txpps, sqrt(r_stats.var_txpps),
-                    r_stats.avg_txbps, sqrt(r_stats.var_txbps),
-                    r_stats.avg_txwire, sqrt(r_stats.var_txwire),
-                    r_stats.avg_rxpps, sqrt(r_stats.var_rxpps),
-                    r_stats.avg_rxbps, sqrt(r_stats.var_rxbps),
-                    r_stats.avg_rxwire, sqrt(r_stats.var_rxwire));
+            latency_calc(samples, sample_count, &r_stats);
         }
+        config->stats = r_stats;
 
         config->flags |= FLAG_WAIT; 
     }
@@ -342,7 +335,9 @@ static void worker_loop(struct pktgen_config *config) {
     free(samples);
 }
 
-static int launch_worker(void *config) {
+static int
+launch_worker(void *config)
+{
     worker_loop((struct pktgen_config*)config);
     return 0;
 }

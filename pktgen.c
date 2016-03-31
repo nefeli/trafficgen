@@ -301,7 +301,9 @@ static int request_handler(int fd_client, char *request) {
 	return req_len;
 }
 
-static int send_status(int status, int ctrl) {
+static int
+send_status(int status, int ctrl)
+{
     char ip[32], port[32];
     strcpy(ip, SCHEDULER_IP);
     strcpy(port, SCHEDULER_PORT);
@@ -343,7 +345,95 @@ static int send_status(int status, int ctrl) {
 	return 0;
 }
 
-static int response_handler(int fd UNUSED, char *request, int request_bytes, struct pktgen_config *cmd, int ctrl) {
+static int
+send_stats(struct pktgen_config *configs, uint16_t n, int ctrl)
+{
+    char ip[32], port[32];
+    strcpy(ip, SCHEDULER_IP);
+    strcpy(port, SCHEDULER_PORT);
+    int sock = connect_socket(ip, port);
+	unsigned len, i;
+	int32_t packed_len;
+	void *buf;
+
+	if (sock < 0) {
+		printf("Failed to connect to the scheduler to send status.\n");
+		close(sock);
+		return -1;
+	}
+
+	// set status
+    Status s = STATUS__INIT;
+	s.has_type = 1;
+	s.type = 2;
+	s.port = ctrl; 
+
+    PortStats *p_stats[n];
+    for (i = 0; i < n; i++) {
+        p_stats[i] = malloc(sizeof(PortStats));
+        port_stats__init(p_stats[i]);
+        p_stats[i]->n =                   configs[i].stats.n;
+        p_stats[i]->avg_rxmpps =          configs[i].stats.avg_rxpps;
+        p_stats[i]->std_rxmpps =          sqrt(configs[i].stats.var_rxpps);
+        p_stats[i]->avg_rxbps =           configs[i].stats.avg_rxbps;
+        p_stats[i]->std_rxbps =           sqrt(configs[i].stats.var_rxbps);
+        p_stats[i]->avg_txmpps =          configs[i].stats.avg_txpps;
+        p_stats[i]->std_txmpps =          sqrt(configs[i].stats.var_txpps);
+        p_stats[i]->avg_txbps =           configs[i].stats.avg_txbps;
+        p_stats[i]->std_txbps =           sqrt(configs[i].stats.var_txbps);
+        p_stats[i]->avg_txwire =          configs[i].stats.avg_txwire;
+        p_stats[i]->std_txwire =          sqrt(configs[i].stats.var_txwire);
+        p_stats[i]->avg_rxwire =          configs[i].stats.avg_rxwire;
+        p_stats[i]->std_rxwire =          sqrt(configs[i].stats.var_rxwire);
+        p_stats[i]->n_rtt =               configs[i].stats.rtt_n;
+        p_stats[i]->rtt_avg =             configs[i].stats.rtt_avg;
+        p_stats[i]->rtt_std =             configs[i].stats.rtt_std;
+        p_stats[i]->rtt_0 =               configs[i].stats.rtt_0;
+        p_stats[i]->rtt_25 =              configs[i].stats.rtt_25;
+        p_stats[i]->rtt_50 =              configs[i].stats.rtt_50;
+        p_stats[i]->rtt_75 =              configs[i].stats.rtt_75;
+        p_stats[i]->rtt_90 =              configs[i].stats.rtt_90;
+        p_stats[i]->rtt_95 =              configs[i].stats.rtt_95;
+        p_stats[i]->rtt_99 =              configs[i].stats.rtt_99;
+        p_stats[i]->rtt_100 =             configs[i].stats.rtt_100;
+        p_stats[i]->tx_bytes =            configs[i].stats.tx_bytes;
+        p_stats[i]->tx_pkts =             configs[i].stats.tx_pkts;
+        p_stats[i]->rx_bytes =            configs[i].stats.rx_bytes;
+        p_stats[i]->rx_pkts =             configs[i].stats.rx_pkts;
+        p_stats[i]->port =                configs[i].port;
+    }
+    s.n_stats = n;
+	s.stats = p_stats; 
+
+	// get length of serialized data
+	len = status__get_packed_size(&s);
+	buf = malloc(len+4);
+	packed_len = htonl((int32_t) len);
+
+	// set the first 4 bytes to be the length of data
+	// then pack the status into the buf
+	memcpy(buf, &packed_len, 4);
+	status__pack(&s, (void*)((uint8_t*)(buf)+4));
+	
+    for (i = 0; i < n; i++) {
+        free(p_stats[i]);
+    }
+
+	// send the buf to the socket
+	if (send(sock, buf, len+4, 0) < 0) {
+		printf("Failed to send stats to the scheduler.\n");
+		close(sock);
+		return -1;
+	}
+	// finish off
+	close(sock);
+	return 0;
+}
+
+static int
+response_handler(int fd UNUSED, char *request, int request_bytes,
+                 struct pktgen_config *cmd, int ctrl)
+{
 	Job *j = job__unpack(NULL, request_bytes, (void*)request);
 
 	if (j == NULL) {
@@ -378,7 +468,7 @@ static int response_handler(int fd UNUSED, char *request, int request_bytes, str
         cmd->flags |= FLAG_WAIT;
 
     if (j->print)
-        cmd->flags |= FLAG_PRINT;
+        cmd->flags |= (FLAG_PRINT | FLAG_WAIT);
 
     if (j->tcp)
         cmd->proto = 6;
@@ -421,11 +511,16 @@ static int response_handler(int fd UNUSED, char *request, int request_bytes, str
 	job__free_unpacked(j, NULL);
 	
 	// send success status regardless for now
-	return send_status(STATUS__TYPE__SUCCESS, ctrl);
+    if (!(cmd->flags & FLAG_PRINT))
+        return send_status(STATUS__TYPE__SUCCESS, ctrl);
+    else
+        return 0;
 }
 /* end demo stuff */
 
-int main(int argc, char *argv[]) {
+int
+main(int argc, char *argv[])
+{
     uint8_t nb_ports, port, nb_cores, core; 
     struct rte_mempool *mp UNUSED;
     struct pktgen_config cmd;
@@ -520,6 +615,9 @@ int main(int argc, char *argv[]) {
             	if (response_handler(fd_client, request, request_bytes, &cmd, control_port) == -1) {
             		printf("Failed to respond to request from scheduler.\n");
             	}
+                if (cmd.flags & FLAG_PRINT) {
+                    send_stats(config, nb_ports, control_port);
+                }
 			} else {
                 printf("Failed to process request from scheduler.\n");
 			}
@@ -594,11 +692,6 @@ int main(int argc, char *argv[]) {
                    config[i].num_flows, config[i].size_min, config[i].size_max,
                    config[i].life_min, config[i].life_max, config[i].flags);
 #endif
-
-            if (cmd.flags & FLAG_PRINT) {
-                printf("%s\n", config[core].o_sec);
-                printf("Core %u: Results\n{%s\n    %s}\n", i, config[core].o_delay, config[core].o_xput);
-            }
             core++;
             port++;
         }

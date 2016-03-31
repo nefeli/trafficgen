@@ -27,6 +27,7 @@ class Q(object):
         self.nodes = {}
         self.jobs = []
         self.thread = None
+        self.results = {}
         socket.setdefaulttimeout(1)
         if nodes_file:
             self.nodes = self.load_nodes(nodes_file)
@@ -108,6 +109,37 @@ class Q(object):
                 logger.info('Node %s successfully completed job.' % self.nodes[ip_str].addr())
                 self.nodes[ip_str].finish_current_job()
                 self.nodes[ip_str].next_job()
+            if status.type == status_pb2.Status.STATS:
+                self.nodes[ip_str].finish_current_job()
+                self.nodes[ip_str].next_job()
+                for ps in status.stats:
+                    if ip_str not in self.results:
+                        self.results[ip_str] = {}
+                    self.results[ip_str][ps.port] = {
+                            'rtt_0':                  ps.rtt_0,
+                            'rtt_100':                ps.rtt_100,
+                            'rtt_25':                 ps.rtt_25,
+                            'rtt_50':                 ps.rtt_50,
+                            'rtt_75':                 ps.rtt_75,
+                            'rtt_90':                 ps.rtt_90,
+                            'rtt_95':                 ps.rtt_95,
+                            'rtt_99':                 ps.rtt_99,
+                            'rtt_mean':               ps.rtt_avg,
+                            'rtt_samples':            ps.n_rtt,
+                            'rtt_std':                ps.rtt_std,
+                            'rx_mbps_mean':           ps.avg_rxbps,
+                            'rx_mbps_std':            ps.std_rxbps,
+                            'rx_mbps_wire_mean':      ps.avg_rxwire,
+                            'rx_mbps_wire_std':       ps.std_rxwire,
+                            'rx_mpps_mean':           ps.avg_rxmpps,
+                            'rx_mpps_std':            ps.std_rxmpps,
+                            'tx_mbps_mean':           ps.avg_txbps,
+                            'tx_mbps_std':            ps.std_txbps,
+                            'tx_mbps_wire_mean':      ps.avg_txwire,
+                            'tx_mbps_wire_std':       ps.std_txwire,
+                            'tx_mpps_mean':           ps.avg_txmpps,
+                            'tx_mpps_std':            ps.std_txmpps
+                    }
             if status.type == status_pb2.Status.FAIL:
                 logger.info('Node %s successfully completed job.' % self.nodes[ip_str].addr())
         except:
