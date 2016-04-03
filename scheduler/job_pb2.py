@@ -18,7 +18,8 @@ _sym_db = _symbol_database.Default()
 DESCRIPTOR = _descriptor.FileDescriptor(
   name='job.proto',
   package='',
-  serialized_pb=_b('\n\tjob.proto\"\x95\x02\n\x03Job\x12\x0f\n\x07tx_rate\x18\x01 \x01(\x05\x12\x10\n\x08\x64uration\x18\x02 \x01(\x05\x12\x0e\n\x06warmup\x18\x03 \x01(\x05\x12\x11\n\tnum_flows\x18\x04 \x01(\x05\x12\x10\n\x08port_min\x18\x05 \x01(\x05\x12\x10\n\x08port_max\x18\x06 \x01(\x05\x12\x10\n\x08size_min\x18\x07 \x01(\x05\x12\x10\n\x08size_max\x18\x08 \x01(\x05\x12\x10\n\x08life_min\x18\t \x01(\x02\x12\x10\n\x08life_max\x18\n \x01(\x02\x12\x11\n\trandomize\x18\x0b \x01(\x08\x12\x0f\n\x07latency\x18\x0c \x01(\x08\x12\x0e\n\x06online\x18\r \x01(\x08\x12\x0c\n\x04stop\x18\x0e \x01(\x08\x12\r\n\x05print\x18\x0f \x01(\x08\x12\x0b\n\x03tcp\x18\x10 \x01(\x08')
+  syntax='proto2',
+  serialized_pb=_b('\n\tjob.proto\"\xa6\x02\n\x03Job\x12\x0f\n\x07tx_rate\x18\x01 \x01(\x05\x12\x10\n\x08\x64uration\x18\x02 \x01(\x05\x12\x0e\n\x06warmup\x18\x03 \x01(\x05\x12\x11\n\tnum_flows\x18\x04 \x01(\x05\x12\x10\n\x08port_min\x18\x05 \x01(\x05\x12\x10\n\x08port_max\x18\x06 \x01(\x05\x12\x10\n\x08size_min\x18\x07 \x01(\x05\x12\x10\n\x08size_max\x18\x08 \x01(\x05\x12\x10\n\x08life_min\x18\t \x01(\x02\x12\x10\n\x08life_max\x18\n \x01(\x02\x12\x11\n\trandomize\x18\x0b \x01(\x08\x12\x0f\n\x07latency\x18\x0c \x01(\x08\x12\x0e\n\x06online\x18\r \x01(\x08\x12\x0c\n\x04stop\x18\x0e \x01(\x08\x12\r\n\x05print\x18\x0f \x01(\x08\x12\x0b\n\x03tcp\x18\x10 \x01(\x08\x12\x0f\n\x07\x64st_mac\x18\x11 \x01(\t')
 )
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
@@ -144,6 +145,13 @@ _JOB = _descriptor.Descriptor(
       message_type=None, enum_type=None, containing_type=None,
       is_extension=False, extension_scope=None,
       options=None),
+    _descriptor.FieldDescriptor(
+      name='dst_mac', full_name='Job.dst_mac', index=16,
+      number=17, type=9, cpp_type=9, label=1,
+      has_default_value=False, default_value=_b("").decode('utf-8'),
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
   ],
   extensions=[
   ],
@@ -152,11 +160,12 @@ _JOB = _descriptor.Descriptor(
   ],
   options=None,
   is_extendable=False,
+  syntax='proto2',
   extension_ranges=[],
   oneofs=[
   ],
   serialized_start=14,
-  serialized_end=291,
+  serialized_end=308,
 )
 
 DESCRIPTOR.message_types_by_name['Job'] = _JOB

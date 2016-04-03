@@ -112,7 +112,11 @@ generate_packet(struct pkt *buf, struct pktgen_config *config,
     rte_eth_macaddr_get(config->port, &addr);
 
     eth_hdr = &buf->eth_hdr;
-    ether_addr_copy(&ether_dst, &eth_hdr->d_addr);
+    if (is_zero_ether_addr(&config->dst_mac)) {
+        ether_addr_copy(&ether_dst, &eth_hdr->d_addr);
+    } else {
+        ether_addr_copy(&config->dst_mac, &eth_hdr->d_addr);
+    }
     ether_addr_copy(&addr, &eth_hdr->s_addr);
     eth_hdr->ether_type = rte_cpu_to_be_16(ETHER_TYPE_IPv4);
 

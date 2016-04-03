@@ -457,6 +457,8 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
     cmd->life_min = j->life_min;
     cmd->life_max = j->life_max;
 
+    ether_addr_from_str(j->dst_mac, &cmd->dst_mac);
+
     if (j->randomize)
         cmd->flags |= FLAG_RANDOMIZE_PAYLOAD;
 
@@ -492,6 +494,7 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
            "\tport_max: %u\n"
            "\tlife_min: %f\n"
            "\tlife_max: %f\n"
+           "\tdst_mac: %s\n"
            "\tlimit flow life: %d\n"
            "\trandomize: %d\n"
            "\tlatency: %d\n"
@@ -502,6 +505,7 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
            cmd->num_flows, cmd->size_min, cmd->size_max,
            cmd->proto, cmd->port_min, cmd->port_max,
            cmd->life_min, cmd->life_max,
+           j->dst_mac,
            cmd->flags & FLAG_LIMIT_FLOW_LIFE,
            cmd->flags & FLAG_RANDOMIZE_PAYLOAD,
            cmd->flags & FLAG_MEASURE_LATENCY,
@@ -602,6 +606,7 @@ main(int argc, char *argv[])
     cmd.tx_rate = 0;
     cmd.flags = 0;
     cmd.prefix = prefix;
+    cmd.dst_mac = zero_mac;
     cmd.rx_ring_size = GEN_DEFAULT_RX_RING_SIZE;
     cmd.tx_ring_size = GEN_DEFAULT_TX_RING_SIZE;
 
@@ -679,6 +684,7 @@ main(int argc, char *argv[])
             config[core].tx_ring_size = cmd.tx_ring_size;
             config[core].flags = cmd.flags;
             config[core].prefix = cmd.prefix;
+            ether_addr_copy(&cmd.dst_mac, &config[core].dst_mac);
 #if 0
             printf("config[%u] job: {\n"
                    "\ttx_rate: %u\n"

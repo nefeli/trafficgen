@@ -152,6 +152,8 @@ struct pktgen_config {
 
     uint64_t seed;
     struct rate_stats stats;
+
+    struct ether_addr dst_mac;
 };
 
 struct pkt {
@@ -170,8 +172,8 @@ static const struct rte_eth_conf port_conf_default = {
     .rxmode = { .max_rx_pkt_len = ETHER_MAX_LEN }
 };
 
-static struct ether_addr ether_src UNUSED =
-{{ 0x68, 0x05, 0xca, 0x00, 0x00, 0xab }};
+static struct ether_addr zero_mac UNUSED =
+{{ 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 }};
 
 static struct ether_addr ether_dst UNUSED =
 {{ 0x68, 0x05, 0xca, 0x00, 0x00, 0x01 }};

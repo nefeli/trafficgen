@@ -5,6 +5,7 @@
 
 #include <stdio.h>
 #include <rte_cycles.h>
+#include <rte_ether.h>
 #include <rte_mbuf.h>
 #include <readline/history.h>
 
@@ -53,6 +54,28 @@ static double get_time_msec(void) {
 
 static inline struct rte_mbuf *current_template(void) {
     return &tx_mbuf_template[rte_socket_id()];
+}
+
+static inline int
+ether_addr_from_str(const char *str, struct ether_addr *addr)
+{
+    int mac[6], ret, i;
+    ret = str == NULL ? 0 : sscanf(str, "%x:%x:%x:%x:%x:%x",
+            &mac[0],
+            &mac[1],
+            &mac[2],
+            &mac[3],
+            &mac[4],
+            &mac[5]);
+
+    if (ret != 6 || addr == NULL) {
+        return -1;
+    }
+
+    for (i = 0; i < 6; i++) {
+        addr->addr_bytes[i] = (uint8_t)mac[i];
+    }
+    return 0;
 }
 
 /* Using AVX for now. Revisit this decision someday */
