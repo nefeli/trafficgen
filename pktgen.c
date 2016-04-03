@@ -1,7 +1,9 @@
 #include "pktgen.h"
 #include "pktgen_worker.c"
 
-static inline int port_init(uint8_t port, struct pktgen_config *config UNUSED) {
+static inline int
+port_init(uint8_t port, struct pktgen_config *config UNUSED)
+{
     struct rte_eth_conf port_conf = port_conf_default;
     const uint16_t rx_rings = 1, tx_rings = 1;
     int retval;
@@ -12,14 +14,14 @@ static inline int port_init(uint8_t port, struct pktgen_config *config UNUSED) {
 
     snprintf(name, sizeof(name), "RX%02u:%02u", port, (unsigned)0);
     struct rte_mempool *rx_mp = rte_pktmbuf_pool_create(name, MPOOL_SIZE,
-            0, 0, RTE_MBUF_DEFAULT_BUF_SIZE, 0);
+            0, 0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_eth_dev_socket_id(port));
     if (rx_mp == NULL) {
         rte_exit(EXIT_FAILURE, "Cannot create RX mbuf pool: %s\n", rte_strerror(rte_errno));
     }
 
     snprintf(name, sizeof(name), "TX%02u:%02u", port, (unsigned)0);
     struct rte_mempool *tx_mp = rte_pktmbuf_pool_create(name, MPOOL_SIZE,
-            0, 0, RTE_MBUF_DEFAULT_BUF_SIZE, 0);
+            0, 0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_eth_dev_socket_id(port));
     if (tx_mp == NULL) {
         rte_exit(EXIT_FAILURE, "Cannot create TX mbuf pool: %s\n", rte_strerror(rte_errno));
     }

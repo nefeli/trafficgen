@@ -312,6 +312,8 @@ worker_loop(struct pktgen_config *config)
             if (unlikely(burst < nb_rx)) {
                 mbuf_free_bulk(bufs + burst, nb_rx - burst);
             }
+
+            rte_mempool_put_bulk(tx_pool, (void **)(bufs + nb_rx), burst - nb_rx);
         }
 
         if (r_stats.n > 0 && sample_count > 0) {
