@@ -581,6 +581,7 @@ main(int argc, char *argv[])
         }
         memset(&config[core], 0, sizeof(struct pktgen_config));
         config[core].flags = FLAG_WAIT;
+        config[core].port = port_map[core];
 
         rte_eal_remote_launch(lcore_init, (void*)&config[core], i);
         rte_eal_wait_lcore(i);
