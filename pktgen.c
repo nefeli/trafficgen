@@ -304,10 +304,9 @@ static int request_handler(int fd_client, char *request) {
 }
 
 static int
-send_status(int status, int ctrl)
+send_status(int status, char *ip, int ctrl)
 {
-    char ip[32], port[32];
-    strcpy(ip, SCHEDULER_IP);
+    char port[32];
     strcpy(port, SCHEDULER_PORT);
     int sock = connect_socket(ip, port);
 	unsigned len;
@@ -348,10 +347,9 @@ send_status(int status, int ctrl)
 }
 
 static int
-send_stats(struct pktgen_config *configs, uint16_t n, int ctrl)
+send_stats(struct pktgen_config *configs, uint16_t n, char *ip, int ctrl)
 {
-    char ip[32], port[32];
-    strcpy(ip, SCHEDULER_IP);
+    char port[32];
     strcpy(port, SCHEDULER_PORT);
     int sock = connect_socket(ip, port);
 	unsigned len, i;
@@ -434,7 +432,7 @@ send_stats(struct pktgen_config *configs, uint16_t n, int ctrl)
 
 static int
 response_handler(int fd UNUSED, char *request, int request_bytes,
-                 struct pktgen_config *cmd, int ctrl)
+                 struct pktgen_config *cmd, char *ip, int ctrl)
 {
 	Job *j = job__unpack(NULL, request_bytes, (void*)request);
 
@@ -518,7 +516,7 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
 	
 	// send success status regardless for now
     if (!(cmd->flags & FLAG_PRINT))
-        return send_status(STATUS__TYPE__SUCCESS, ctrl);
+        return send_status(STATUS__TYPE__SUCCESS, ip, ctrl);
     else
         return 0;
 }
@@ -612,19 +610,22 @@ main(int argc, char *argv[])
     cmd.tx_ring_size = GEN_DEFAULT_TX_RING_SIZE;
 
     int request_bytes;
-	char request[8192];
+	char request[8192], *client_ip;
 	struct sockaddr_storage addr_client;
 
     for (;;) {
         socklen_t sin_size = sizeof addr_client;
         int fd_client = accept(fd_server, (struct sockaddr *)&addr_client, &sin_size);
         if (fd_client >= 0) {
+            struct sockaddr_in *caddr = (struct sockaddr_in*)&addr_client;
+            client_ip = inet_ntoa(caddr->sin_addr);
+            printf("client_ip: %s\n", client_ip);
             if ((request_bytes = request_handler(fd_client, request)) > 0) {
-            	if (response_handler(fd_client, request, request_bytes, &cmd, control_port) == -1) {
+            	if (response_handler(fd_client, request, request_bytes, &cmd, client_ip, control_port) == -1) {
             		printf("Failed to respond to request from scheduler.\n");
             	}
-                if (cmd.flags & FLAG_PRINT) {
-                    send_stats(config, nb_ports, control_port);
+                if (cmd.flags & FLAG_PRINT && send_stats(config, nb_ports, client_ip, control_port) == -1) {
+            		printf("Failed to send stats to scheduler.\n");
                 }
 			} else {
                 printf("Failed to process request from scheduler.\n");
