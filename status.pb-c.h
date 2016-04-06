@@ -35,7 +35,7 @@ struct  _PortStats
   ProtobufCMessage base;
   uint64_t n;
   uint64_t n_rtt;
-  uint64_t port;
+  char *port;
   double avg_rxmpps;
   double std_rxmpps;
   double avg_rxbps;
@@ -65,7 +65,7 @@ struct  _PortStats
 };
 #define PORT_STATS__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&port_stats__descriptor) \
-    , 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
+    , 0, 0, NULL, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 }
 
 
 struct  _Status

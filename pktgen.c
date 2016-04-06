@@ -355,6 +355,7 @@ send_stats(struct pktgen_config *configs, uint16_t n, char *ip, int ctrl)
 	unsigned len, i;
 	int32_t packed_len;
 	void *buf;
+    struct ether_addr port_addr;
 
 	if (sock < 0) {
 		printf("Failed to connect to the scheduler to send status.\n");
@@ -400,7 +401,9 @@ send_stats(struct pktgen_config *configs, uint16_t n, char *ip, int ctrl)
         p_stats[i]->tx_pkts =             configs[i].stats.tx_pkts;
         p_stats[i]->rx_bytes =            configs[i].stats.rx_bytes;
         p_stats[i]->rx_pkts =             configs[i].stats.rx_pkts;
-        p_stats[i]->port =                configs[i].port;
+        p_stats[i]->port = (char*)malloc(sizeof(char) * 18);
+        rte_eth_macaddr_get(configs[i].port, &port_addr);
+        ether_format_addr(p_stats[i]->port, 18, &port_addr);
     }
     s.n_stats = n;
 	s.stats = p_stats; 
@@ -416,6 +419,7 @@ send_stats(struct pktgen_config *configs, uint16_t n, char *ip, int ctrl)
 	status__pack(&s, (void*)((uint8_t*)(buf)+4));
 	
     for (i = 0; i < n; i++) {
+        free(p_stats[i]->port);
         free(p_stats[i]);
     }
 

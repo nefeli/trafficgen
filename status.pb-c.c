@@ -123,7 +123,7 @@ static const ProtobufCFieldDescriptor port_stats__field_descriptors[29] =
     "port",
     3,
     PROTOBUF_C_LABEL_REQUIRED,
-    PROTOBUF_C_TYPE_UINT64,
+    PROTOBUF_C_TYPE_STRING,
     0,   /* quantifier_offset */
     offsetof(PortStats, port),
     NULL,
