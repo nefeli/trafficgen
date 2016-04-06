@@ -447,6 +447,7 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
 
     cmd->flags &= !FLAG_PRINT;
     cmd->flags &= !FLAG_WAIT;
+    cmd->port_mac = zero_mac;
 
     cmd->tx_rate = j->tx_rate;
     cmd->warmup = j->warmup;
@@ -460,6 +461,7 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
     cmd->life_max = j->life_max;
 
     ether_addr_from_str(j->dst_mac, &cmd->dst_mac);
+    ether_addr_from_str(j->port, &cmd->port_mac);
 
     if (j->randomize)
         cmd->flags |= FLAG_RANDOMIZE_PAYLOAD;
@@ -497,6 +499,7 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
            "\tlife_min: %f\n"
            "\tlife_max: %f\n"
            "\tdst_mac: %s\n"
+           "\tport: %s\n"
            "\tlimit flow life: %d\n"
            "\trandomize: %d\n"
            "\tlatency: %d\n"
@@ -507,7 +510,7 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
            cmd->num_flows, cmd->size_min, cmd->size_max,
            cmd->proto, cmd->port_min, cmd->port_max,
            cmd->life_min, cmd->life_max,
-           j->dst_mac,
+           j->dst_mac, j->port,
            cmd->flags & FLAG_LIMIT_FLOW_LIFE,
            cmd->flags & FLAG_RANDOMIZE_PAYLOAD,
            cmd->flags & FLAG_MEASURE_LATENCY,
@@ -584,6 +587,7 @@ main(int argc, char *argv[])
         memset(&config[core], 0, sizeof(struct pktgen_config));
         config[core].flags = FLAG_WAIT;
         config[core].port = port_map[core];
+        rte_eth_macaddr_get(port_map[core], &config[core].port_mac);
 
         rte_eal_remote_launch(lcore_init, (void*)&config[core], i);
         rte_eal_wait_lcore(i);
@@ -610,6 +614,7 @@ main(int argc, char *argv[])
     cmd.flags = 0;
     cmd.prefix = prefix;
     cmd.dst_mac = zero_mac;
+    cmd.port_mac = zero_mac;
     cmd.rx_ring_size = GEN_DEFAULT_RX_RING_SIZE;
     cmd.tx_ring_size = GEN_DEFAULT_TX_RING_SIZE;
 
@@ -673,6 +678,12 @@ main(int argc, char *argv[])
             if (port == nb_ports) {
                 break;
             }
+
+            if (!is_zero_ether_addr(&cmd.port_mac) &&
+                !is_same_ether_addr(&cmd.port_mac, &config[core].port_mac)) {
+                goto launch_done;
+            }
+
             config[core].tx_rate = cmd.tx_rate;
             config[core].warmup = cmd.warmup;
             config[core].duration = cmd.duration;
@@ -706,6 +717,7 @@ main(int argc, char *argv[])
                    config[i].num_flows, config[i].size_min, config[i].size_max,
                    config[i].life_min, config[i].life_max, config[i].flags);
 #endif
+launch_done:
             core++;
             port++;
         }

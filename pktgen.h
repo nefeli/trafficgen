@@ -154,6 +154,7 @@ struct pktgen_config {
     struct rate_stats stats;
 
     struct ether_addr dst_mac;
+    struct ether_addr port_mac;
 };
 
 struct pkt {

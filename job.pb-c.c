@@ -50,7 +50,7 @@ void   job__free_unpacked
   assert(message->base.descriptor == &job__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
-static const ProtobufCFieldDescriptor job__field_descriptors[17] =
+static const ProtobufCFieldDescriptor job__field_descriptors[18] =
 {
   {
     "tx_rate",
@@ -256,6 +256,18 @@ static const ProtobufCFieldDescriptor job__field_descriptors[17] =
     0,             /* flags */
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
+  {
+    "port",
+    18,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Job, port),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
 };
 static const unsigned job__field_indices_by_name[] = {
   16,   /* field[16] = dst_mac */
@@ -265,6 +277,7 @@ static const unsigned job__field_indices_by_name[] = {
   8,   /* field[8] = life_min */
   3,   /* field[3] = num_flows */
   12,   /* field[12] = online */
+  17,   /* field[17] = port */
   5,   /* field[5] = port_max */
   4,   /* field[4] = port_min */
   14,   /* field[14] = print */
@@ -279,7 +292,7 @@ static const unsigned job__field_indices_by_name[] = {
 static const ProtobufCIntRange job__number_ranges[1 + 1] =
 {
   { 1, 0 },
-  { 0, 17 }
+  { 0, 18 }
 };
 const ProtobufCMessageDescriptor job__descriptor =
 {
@@ -289,7 +302,7 @@ const ProtobufCMessageDescriptor job__descriptor =
   "Job",
   "",
   sizeof(Job),
-  17,
+  18,
   job__field_descriptors,
   job__field_indices_by_name,
   1,  job__number_ranges,

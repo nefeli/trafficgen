@@ -17,4 +17,6 @@ message Job {
     optional bool stop = 14;
     optional bool print = 15;
     optional bool tcp = 16;
+    optional string dst_mac = 17;
+    optional string port = 18;
 }
