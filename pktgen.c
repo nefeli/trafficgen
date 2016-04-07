@@ -343,6 +343,8 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
     cmd->flags &= !FLAG_PRINT;
     cmd->flags &= !FLAG_WAIT;
     cmd->port_mac = zero_mac;
+    cmd->src_mac = zero_mac;
+    cmd->dst_mac = zero_mac;
 
     cmd->tx_rate = j->tx_rate;
     cmd->warmup = j->warmup;
@@ -355,6 +357,7 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
     cmd->life_min = j->life_min;
     cmd->life_max = j->life_max;
 
+    ether_addr_from_str(j->src_mac, &cmd->src_mac);
     ether_addr_from_str(j->dst_mac, &cmd->dst_mac);
     ether_addr_from_str(j->port, &cmd->port_mac);
 
@@ -499,6 +502,7 @@ init_done:
     cmd.duration = 0;
     cmd.tx_rate = 0;
     cmd.flags = 0;
+    cmd.src_mac = zero_mac;
     cmd.dst_mac = zero_mac;
     cmd.port_mac = zero_mac;
     cmd.rx_ring_size = GEN_DEFAULT_RX_RING_SIZE;

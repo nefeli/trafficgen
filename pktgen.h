@@ -145,6 +145,7 @@ struct pktgen_config {
     uint64_t seed;
     struct rate_stats stats;
 
+    struct ether_addr src_mac;
     struct ether_addr dst_mac;
     struct ether_addr port_mac;
 };

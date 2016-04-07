@@ -58,12 +58,13 @@ struct  _Job
   protobuf_c_boolean print;
   protobuf_c_boolean has_tcp;
   protobuf_c_boolean tcp;
+  char *src_mac;
   char *dst_mac;
   char *port;
 };
 #define JOB__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&job__descriptor) \
-    , 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, NULL, NULL }
+    , 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, NULL, NULL, NULL }
 
 
 /* Job methods */

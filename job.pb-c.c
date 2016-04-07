@@ -50,7 +50,7 @@ void   job__free_unpacked
   assert(message->base.descriptor == &job__descriptor);
   protobuf_c_message_free_unpacked ((ProtobufCMessage*)message, allocator);
 }
-static const ProtobufCFieldDescriptor job__field_descriptors[18] =
+static const ProtobufCFieldDescriptor job__field_descriptors[19] =
 {
   {
     "tx_rate",
@@ -245,8 +245,20 @@ static const ProtobufCFieldDescriptor job__field_descriptors[18] =
     0,NULL,NULL    /* reserved1,reserved2, etc */
   },
   {
-    "dst_mac",
+    "src_mac",
     17,
+    PROTOBUF_C_LABEL_OPTIONAL,
+    PROTOBUF_C_TYPE_STRING,
+    0,   /* quantifier_offset */
+    offsetof(Job, src_mac),
+    NULL,
+    NULL,
+    0,             /* flags */
+    0,NULL,NULL    /* reserved1,reserved2, etc */
+  },
+  {
+    "dst_mac",
+    18,
     PROTOBUF_C_LABEL_OPTIONAL,
     PROTOBUF_C_TYPE_STRING,
     0,   /* quantifier_offset */
@@ -258,7 +270,7 @@ static const ProtobufCFieldDescriptor job__field_descriptors[18] =
   },
   {
     "port",
-    18,
+    19,
     PROTOBUF_C_LABEL_OPTIONAL,
     PROTOBUF_C_TYPE_STRING,
     0,   /* quantifier_offset */
@@ -270,20 +282,21 @@ static const ProtobufCFieldDescriptor job__field_descriptors[18] =
   },
 };
 static const unsigned job__field_indices_by_name[] = {
-  16,   /* field[16] = dst_mac */
+  17,   /* field[17] = dst_mac */
   1,   /* field[1] = duration */
   11,   /* field[11] = latency */
   9,   /* field[9] = life_max */
   8,   /* field[8] = life_min */
   3,   /* field[3] = num_flows */
   12,   /* field[12] = online */
-  17,   /* field[17] = port */
+  18,   /* field[18] = port */
   5,   /* field[5] = port_max */
   4,   /* field[4] = port_min */
   14,   /* field[14] = print */
   10,   /* field[10] = randomize */
   7,   /* field[7] = size_max */
   6,   /* field[6] = size_min */
+  16,   /* field[16] = src_mac */
   13,   /* field[13] = stop */
   15,   /* field[15] = tcp */
   0,   /* field[0] = tx_rate */
@@ -292,7 +305,7 @@ static const unsigned job__field_indices_by_name[] = {
 static const ProtobufCIntRange job__number_ranges[1 + 1] =
 {
   { 1, 0 },
-  { 0, 18 }
+  { 0, 19 }
 };
 const ProtobufCMessageDescriptor job__descriptor =
 {
@@ -302,7 +315,7 @@ const ProtobufCMessageDescriptor job__descriptor =
   "Job",
   "",
   sizeof(Job),
-  18,
+  19,
   job__field_descriptors,
   job__field_indices_by_name,
   1,  job__number_ranges,
