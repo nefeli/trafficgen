@@ -224,10 +224,8 @@ worker_loop(struct pktgen_config *config)
         rte_delay_us(1);
     }
 
-    double flow_times[config->num_flows + 1];
-    uint16_t flow_ctrs[config->num_flows + 1];
-    memset(flow_times, 0, sizeof(double) * config->num_flows);
-    memset(flow_ctrs, 0, sizeof(uint16_t) * config->num_flows);
+    double *flow_times = NULL;
+    uint16_t *flow_ctrs = NULL;
 
     memset(samples, 0, sizeof(samples[0]) * 2 * num_samples);
 
@@ -247,6 +245,14 @@ worker_loop(struct pktgen_config *config)
         while (config->flags & FLAG_WAIT) {
             rte_delay_us(1);
         }
+
+        flow_ctrs = realloc(flow_ctrs, sizeof(uint16_t)*(config->num_flows + 1));
+        flow_times = realloc(flow_times, sizeof(double)*(config->num_flows + 1));
+        if (flow_ctrs == NULL || flow_times == NULL) {
+            rte_panic("couldn't allocate flow counters");
+        }
+        memset(flow_times, 0, sizeof(double) * config->num_flows);
+        memset(flow_ctrs, 0, sizeof(uint16_t) * config->num_flows);
 
         run_id++;
         config->start_time = get_time_msec();
