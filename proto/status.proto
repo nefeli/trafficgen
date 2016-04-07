@@ -3,7 +3,7 @@ syntax = "proto2";
 message PortStats {
     required uint64 n = 1;
     required uint64 n_rtt = 2;
-    required uint64 port = 3;
+    required string port = 3;
 
     required double avg_rxmpps = 4;
     required double std_rxmpps = 5;

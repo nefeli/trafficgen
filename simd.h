@@ -15,7 +15,8 @@
   #error CPU must be at least Core 2 or equivalent (SSSE3 required)
 #endif
 
-static inline void print_m128i(__m128i a)
+static inline void
+print_m128i(__m128i a)
 {
 	uint32_t b[4] __xmm_aligned;
 	
@@ -23,7 +24,8 @@ static inline void print_m128i(__m128i a)
 	printf("%08x %08x %08x %08x\n", b[0], b[1], b[2], b[3]);
 }
 
-static inline __m128i gather_m128i(void *a, void *b)
+static inline __m128i
+gather_m128i(void *a, void *b)
 {
 #if 1
 	/* faster (in a tight loop test. sometimes slower...) */
@@ -36,7 +38,8 @@ static inline __m128i gather_m128i(void *a, void *b)
 
 #if __AVX__
 
-static inline void print_m256i(__m256i a)
+static inline void
+print_m256i(__m256i a)
 {
 	uint32_t b[8] __ymm_aligned;
 	
@@ -45,7 +48,8 @@ static inline void print_m256i(__m256i a)
 			b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
 }
 
-static inline __m256d concat_two_m128d(__m128d a, __m128d b)
+static inline __m256d
+concat_two_m128d(__m128d a, __m128d b)
 {
 #if 1
 	/* faster */

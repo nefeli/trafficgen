@@ -38,7 +38,6 @@ port_init(uint8_t port, struct pktgen_config *config UNUSED)
         rte_exit(EXIT_FAILURE, "Error with port configuration: %s\n", rte_strerror(rte_errno));
     }
 
-    /* Allocate and set up 1 RX queue per Ethernet port. */
     for (q = 0; q < rx_rings; q++) {
         retval = rte_eth_rx_queue_setup(port, q, GEN_DEFAULT_RX_RING_SIZE,
                 rte_eth_dev_socket_id(port), NULL, rx_mp);
@@ -47,7 +46,6 @@ port_init(uint8_t port, struct pktgen_config *config UNUSED)
         }
     }
 
-    /* Allocate and set up 1 TX queue per Ethernet port. */
     for (q = 0; q < tx_rings; q++) {
         retval = rte_eth_tx_queue_setup(port, q, GEN_DEFAULT_TX_RING_SIZE,
                 rte_eth_dev_socket_id(port), NULL);
@@ -56,13 +54,11 @@ port_init(uint8_t port, struct pktgen_config *config UNUSED)
         }
     }
 
-    /* Start the Ethernet port. */
     retval = rte_eth_dev_start(port);
     if (retval < 0) {
         return retval;
     }
 
-    /* Display the port MAC address. */
     struct ether_addr addr;
     rte_eth_macaddr_get(port, &addr);
     printf("Port %u MAC: %02" PRIx8 " %02" PRIx8 " %02" PRIx8
@@ -72,13 +68,14 @@ port_init(uint8_t port, struct pktgen_config *config UNUSED)
             addr.addr_bytes[2], addr.addr_bytes[3],
             addr.addr_bytes[4], addr.addr_bytes[5]);
 
-    /* Enable RX in promiscuous mode for the Ethernet device. */
     rte_eth_promiscuous_enable(port);
 
     return 0;
 }
 
-static int lcore_init(void *arg) {
+static int
+lcore_init(void *arg)
+{
     struct pktgen_config *config = (struct pktgen_config*)arg;
     unsigned port = config->port;
     char name[7];
@@ -104,107 +101,9 @@ static int lcore_init(void *arg) {
     return 0;
 }
 
-static void usage(void) {
-    printf("tgen> [-rlo] -m M -t T -w W -n N -s MIN[-MAX]\n"
-            "Traffic Gen Options and Flags\n"
-            "\t-m M          Transmit at M mpbs\n"
-            "\t-t T          Generate traffic for T seconds\n"
-            "\t-w W          Warmup for W seconds before collecting stats\n"
-            "\t-n N          Generate a uniform distribution of N flows\n"
-            "\t-k MIN-MAX    Generate flows with lifetimes (seconds) uniformly distributed in [MIN,MAX]\n"
-            "\t-s MIN[-MAX]  Genearte packets with sizes in [MIN,MAX] (or only of size MIN if MAX isn't specified)\n"
-            "\t-r            Randomize packet payloads\n"
-            "\t-p            Print stats\n"
-            "\t-q            Stop\n"
-            "\t-l            Measure latency\n"
-            "\t-o            Generate packets online\n");
-}
-
-static int pktgen_parse_args(int argc, char *argv[], struct pktgen_config *cfg) {
-    int c, n = 0;
-    char *p, *q;
-    optind = 1;
-    cfg->flags &= !FLAG_PRINT;
-    cfg->flags &= !FLAG_WAIT;
-    while ((c = getopt (argc, argv, "pqrlom:t:w:n:s:k:")) != -1) {
-        switch (c) {
-            case 'p':
-                cfg->flags |= FLAG_PRINT;
-                break;
-            case 'q':
-                cfg->flags |= FLAG_WAIT;
-                break;
-            case 'r':
-                cfg->flags |= FLAG_RANDOMIZE_PAYLOAD;
-                break;
-            case 'l':
-                cfg->flags |= FLAG_MEASURE_LATENCY;
-                break;
-            case 'o':
-                cfg->flags |= FLAG_GENERATE_ONLINE;
-                break;
-            case 'm':
-                cfg->tx_rate = atoi(optarg);
-                n++;
-                break;
-            case 't':
-                cfg->duration = atoi(optarg);
-                n++;
-                break;
-            case 'w':
-                cfg->warmup = atoi(optarg);
-                n++;
-                break;
-            case 'n':
-                cfg->num_flows = atoi(optarg);
-                n++;
-                break;
-            case 's':
-                p = optarg;
-                q = strtok(p, "-");
-                if (q == NULL) {
-                    return -1;
-                }
-                cfg->size_min = atoi(q);
-
-                q = strtok(NULL, "-");
-                if (q == NULL) {
-                    cfg->size_max = cfg->size_min;
-                } else {
-                    cfg->size_max = atoi(q);
-                }
-                n++;
-                break;
-            case 'k':
-                cfg->flags |= FLAG_LIMIT_FLOW_LIFE;
-                p = optarg;
-                q = strtok(p, "-");
-                if (q == NULL) {
-                    return -1;
-                }
-                cfg->life_min = atof(q);
-
-                q = strtok(NULL, "-");
-                if (q == NULL) {
-                    cfg->life_max = cfg->life_min;
-                } else {
-                    cfg->life_max = atof(q);
-                }
-                n++;
-                break;
-
-            default:
-                return -1;
-        }
-    }
-    if (n < 5 && !(cfg->flags & (FLAG_WAIT | FLAG_PRINT))) {
-        return -1;
-    }
-    return 0;
-}
-
-/* start demo stuff */
-static int create_and_bind_socket(char *port) {
+static int
+create_and_bind_socket(char *port)
+{
 	int yes = 1;
 	int status, fd_server = -1;
 	struct addrinfo hints, *res, *p;
@@ -235,7 +134,9 @@ static int create_and_bind_socket(char *port) {
     return fd_server;
 }
 
-static int connect_socket(char *ip, char *port) {
+static int
+connect_socket(char *ip, char *port)
+{
 	int sock, status;
 	struct addrinfo hints, *res, *p;
 
@@ -268,7 +169,9 @@ static int connect_socket(char *ip, char *port) {
     return sock;
 }
 
-static int read_n_bytes(int sock, int n, char *buf) {
+static int
+read_n_bytes(int sock, int n, char *buf)
+{
 	int bytes_read = 0;
 	while (bytes_read < n) {
 		int res = recv(sock, buf + bytes_read, n - bytes_read, 0);
@@ -280,26 +183,23 @@ static int read_n_bytes(int sock, int n, char *buf) {
 	return bytes_read;
 }
 
-static int request_handler(int fd_client, char *request) {
+static int
+request_handler(int fd_client, char *request)
+{
 	int32_t req_len;
 	char len_buf[4];
 
-	// read 4 bytes to get the length of the job
 	if (read_n_bytes(fd_client, 4, len_buf) < 0) {
 		printf("Failed to read length of status.\n");
 	}
 	
-	// convert to host
-    // p
     int32_t *x = (int32_t*)&len_buf;
 	req_len = ntohl(*x);
 
-	// read req_len bytes from the socket
 	if (read_n_bytes(fd_client, req_len, request) < 0) {
 		printf("Failed to read status.\n");
 	}
 
-	// return len of Job
 	return req_len;
 }
 
@@ -319,29 +219,24 @@ send_status(int status, char *ip, int ctrl)
 		return -1;
 	}
 
-	// set status
 	Status s = STATUS__INIT;
 	s.has_type = 1;
 	s.type = status;
 	s.port = ctrl; 
 
-	// get length of serialized data
 	len = status__get_packed_size(&s);
 	buf = malloc(len+4);
 	packed_len = htonl((int32_t) len);
 
-	// set the first 4 bytes to be the length of data
-	// then pack the status into the buf
 	memcpy(buf, &packed_len, 4);
 	status__pack(&s, (void*)((uint8_t*)(buf)+4));
 	
-	// send the buf to the socket
 	if (send(sock, buf, len+4, 0) < 0) {
 		printf("Failed to send status to the scheduler.\n");
 		close(sock);
 		return -1;
 	}
-	// finish off
+
 	close(sock);
 	return 0;
 }
@@ -363,7 +258,6 @@ send_stats(struct pktgen_config *configs, uint16_t n, char *ip, int ctrl)
 		return -1;
 	}
 
-	// set status
     Status s = STATUS__INIT;
 	s.has_type = 1;
 	s.type = 2;
@@ -413,13 +307,10 @@ send_stats(struct pktgen_config *configs, uint16_t n, char *ip, int ctrl)
     s.n_stats = n;
 	s.stats = p_stats; 
 
-	// get length of serialized data
 	len = status__get_packed_size(&s);
 	buf = malloc(len+4);
 	packed_len = htonl((int32_t) len);
 
-	// set the first 4 bytes to be the length of data
-	// then pack the status into the buf
 	memcpy(buf, &packed_len, 4);
 	status__pack(&s, (void*)((uint8_t*)(buf)+4));
 	
@@ -428,13 +319,12 @@ send_stats(struct pktgen_config *configs, uint16_t n, char *ip, int ctrl)
         free(p_stats[i]);
     }
 
-	// send the buf to the socket
 	if (send(sock, buf, len+4, 0) < 0) {
 		printf("Failed to send stats to the scheduler.\n");
 		close(sock);
 		return -1;
 	}
-	// finish off
+
 	close(sock);
 	return 0;
 }
@@ -524,37 +414,31 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
            cmd->flags & FLAG_WAIT,
            cmd->flags & FLAG_PRINT);
 #endif
-	// unpack job
 	job__free_unpacked(j, NULL);
 	
-	// send success status regardless for now
     if (!(cmd->flags & FLAG_PRINT))
         return send_status(STATUS__TYPE__SUCCESS, ip, ctrl);
     else
         return 0;
 }
-/* end demo stuff */
 
 int
 main(int argc, char *argv[])
 {
+    int i;
     uint8_t nb_ports, port, nb_cores, core; 
-    struct rte_mempool *mp UNUSED;
     struct pktgen_config cmd;
-    char *icmd;
 
-    /* Initialize EAL */
     int ret = rte_eal_init(argc, argv);
     if (ret < 0) {
-        usage();
         rte_exit(EXIT_FAILURE, "Error with EAL initialization\n");
     }
 
     argc -= ret;
     argv += ret;
 
-    if (argc < 2) {
-        rte_exit(EXIT_FAILURE, "Args: LISTEN_PORT PREFIX\n");
+    if (argc < 1) {
+        rte_exit(EXIT_FAILURE, "Args: LISTEN_PORT\n");
     }
 
     nb_ports = rte_eth_dev_count();
@@ -579,9 +463,6 @@ main(int argc, char *argv[])
         rte_exit(EXIT_FAILURE, "Failed to listen to socket.\n");
     }
 
-    uint32_t prefix = rte_cpu_to_be_32((uint32_t)inet_addr(argv[2]));
-
-    int i;
     struct pktgen_config config[nb_cores];
 
     core = 0;
@@ -604,8 +485,6 @@ init_done:
         port++;
     }
 
-    /* Parse pktgen command line */
-    ret = read_history(HISTORY_FILE);
     signal(SIGINT, sig_handler);
 
     cmd.port_min = 0;
@@ -620,7 +499,6 @@ init_done:
     cmd.duration = 0;
     cmd.tx_rate = 0;
     cmd.flags = 0;
-    cmd.prefix = prefix;
     cmd.dst_mac = zero_mac;
     cmd.port_mac = zero_mac;
     cmd.rx_ring_size = GEN_DEFAULT_RX_RING_SIZE;
@@ -636,7 +514,6 @@ init_done:
         if (fd_client >= 0) {
             struct sockaddr_in *caddr = (struct sockaddr_in*)&addr_client;
             client_ip = inet_ntoa(caddr->sin_addr);
-            printf("client_ip: %s\n", client_ip);
             if ((request_bytes = request_handler(fd_client, request)) > 0) {
             	if (response_handler(fd_client, request, request_bytes, &cmd, client_ip, control_port) == -1) {
             		printf("Failed to respond to request from scheduler.\n");
@@ -648,35 +525,6 @@ init_done:
                 printf("Failed to process request from scheduler.\n");
 			}
 			close(fd_client);
-        }
-
-        if (0 && (icmd = readline("tgen> ")) != NULL) {
-            add_history(icmd);
-            
-            char *p, *q;
-            char *cmd_argv[20], tcmd[1024];
-            int cmd_argc = 1;
-
-            if (sprintf(tcmd, "tgen %s", icmd) < 0) {
-                continue;
-            }
-            p = tcmd;
-
-            cmd_argv[cmd_argc++] = (q = strtok(p, " "));
-            if (q == NULL) {
-                usage();
-                continue;
-            }
-
-            while ((q = strtok(NULL, " ")) != NULL) {
-                cmd_argv[cmd_argc++] = q;
-            }
-
-            ret = pktgen_parse_args(cmd_argc, cmd_argv, &cmd);
-            if (ret < 0) {
-                usage();
-                continue;
-            }
         }
 
         /* Launch generator */
@@ -708,7 +556,6 @@ init_done:
             config[core].rx_ring_size = cmd.rx_ring_size;
             config[core].tx_ring_size = cmd.tx_ring_size;
             config[core].flags = cmd.flags;
-            config[core].prefix = cmd.prefix;
             ether_addr_copy(&cmd.dst_mac, &config[core].dst_mac);
 #if 0
             printf("config[%u] job: {\n"
@@ -730,7 +577,6 @@ launch_done:
             port++;
         }
     }
-    ret = write_history(HISTORY_FILE);
     printf("\n");
     return 0;
 }

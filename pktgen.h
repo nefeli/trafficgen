@@ -12,8 +12,6 @@
 #include <stdio.h>
 #include <math.h>
 #include <signal.h>
-#include <readline/readline.h>
-#include <readline/history.h>
 
 /* start demo stuff */
 #include <errno.h>
@@ -69,7 +67,6 @@
 #define ETH_FCS 4
 #define ETH_GAP 12
 #define ETH_OVERHEAD (ETH_PREAMBLE + ETH_START_OF_FRAME + ETH_FCS + ETH_GAP)
-
 
 #define FLAG_MEASURE_LATENCY 1
 #define FLAG_RANDOMIZE_PAYLOAD (1<<1)
@@ -144,8 +141,6 @@ struct pktgen_config {
     unsigned tx_ring_size;
 
     unsigned flags;
-
-    uint32_t prefix;
 
     uint64_t seed;
     struct rate_stats stats;

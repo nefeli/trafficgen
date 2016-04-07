@@ -150,8 +150,8 @@ generate_packet(struct pkt *buf, struct pktgen_config *config,
         flow_ctrs[flow]++;
     }
 
-    ip_hdr->src_addr = rte_cpu_to_be_32((~config->prefix & (flow_ctrs[flow] * flow * config->ip_min)) | config->prefix);
-    ip_hdr->dst_addr = rte_cpu_to_be_32((~config->prefix & (flow_ctrs[flow] * (flow ^ GEN_KEY) * config->ip_min)) | config->prefix);
+    ip_hdr->src_addr = rte_cpu_to_be_32(flow_ctrs[flow] * flow * config->ip_min);
+    ip_hdr->dst_addr = rte_cpu_to_be_32(flow_ctrs[flow] * (flow ^ GEN_KEY) * config->ip_min);
 
     ip_hdr->total_length = rte_cpu_to_be_16(pkt_size - 4 - sizeof(struct ether_hdr));
     ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
