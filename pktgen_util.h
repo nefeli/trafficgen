@@ -140,6 +140,7 @@ static int mbuf_alloc_bulk(struct rte_mempool *mp, mbuf_array_t array, uint16_t 
     return 0;
 }
 
+#if 0
 /* for packets to be processed in the fast path, all packets must:
  * 1. share the same mempool
  * 2. single segment
@@ -220,4 +221,5 @@ slow_path:
         rte_pktmbuf_free(array[i]);
     return 0;
 }
+#endif
 #endif

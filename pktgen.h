@@ -58,6 +58,7 @@
 #define MAX_PKT_SIZE 2048
 #define MPOOL_SIZE ((1<<16) - 1)
 
+#define GEN_DEBUG 0
 #define GEN_KEY 0x1234
 #define GEN_DEFAULT_SEED 1234
 #define GEN_DEFAULT_RX_RING_SIZE 256
@@ -145,10 +146,6 @@ struct pktgen_config {
     unsigned flags;
 
     uint32_t prefix;
-
-    char o_delay[1024];
-    char o_xput[1024];
-    char o_sec[1024];
 
     uint64_t seed;
     struct rate_stats stats;

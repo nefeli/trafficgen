@@ -13,14 +13,14 @@ port_init(uint8_t port, struct pktgen_config *config UNUSED)
     rte_eth_dev_stop(port); 
 
     snprintf(name, sizeof(name), "RX%02u:%02u", port, (unsigned)0);
-    struct rte_mempool *rx_mp = rte_pktmbuf_pool_create(name, MPOOL_SIZE,
+    struct rte_mempool *rx_mp = rte_pktmbuf_pool_create(name, 2 * GEN_DEFAULT_RX_RING_SIZE,
             0, 0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_eth_dev_socket_id(port));
     if (rx_mp == NULL) {
         rte_exit(EXIT_FAILURE, "Cannot create RX mbuf pool: %s\n", rte_strerror(rte_errno));
     }
 
     snprintf(name, sizeof(name), "TX%02u:%02u", port, (unsigned)0);
-    struct rte_mempool *tx_mp = rte_pktmbuf_pool_create(name, MPOOL_SIZE,
+    struct rte_mempool *tx_mp = rte_pktmbuf_pool_create(name, 2 * GEN_DEFAULT_TX_RING_SIZE,
             0, 0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_eth_dev_socket_id(port));
     if (tx_mp == NULL) {
         rte_exit(EXIT_FAILURE, "Cannot create TX mbuf pool: %s\n", rte_strerror(rte_errno));
@@ -401,6 +401,11 @@ send_stats(struct pktgen_config *configs, uint16_t n, char *ip, int ctrl)
         p_stats[i]->tx_pkts =             configs[i].stats.tx_pkts;
         p_stats[i]->rx_bytes =            configs[i].stats.rx_bytes;
         p_stats[i]->rx_pkts =             configs[i].stats.rx_pkts;
+
+        if (configs[i].port > n) {
+            continue;
+        }
+
         p_stats[i]->port = (char*)malloc(sizeof(char) * 18);
         rte_eth_macaddr_get(configs[i].port, &port_addr);
         ether_format_addr(p_stats[i]->port, 18, &port_addr);
@@ -486,6 +491,7 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
     if (cmd->life_min >= 0)
         cmd->flags |= FLAG_LIMIT_FLOW_LIFE;
 
+#if GEN_DEBUG
     printf("Starting traffic: {\n"
            "\ttx_rate: %u\n"
            "\twarmup: %u\n"
@@ -517,7 +523,7 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
            cmd->flags & FLAG_GENERATE_ONLINE,
            cmd->flags & FLAG_WAIT,
            cmd->flags & FLAG_PRINT);
-
+#endif
 	// unpack job
 	job__free_unpacked(j, NULL);
 	
@@ -581,10 +587,11 @@ main(int argc, char *argv[])
     core = 0;
     port = 0;
     RTE_LCORE_FOREACH_SLAVE(i) {
-        if (port == nb_ports) {
-            break;
-        }
         memset(&config[core], 0, sizeof(struct pktgen_config));
+        if (port >= nb_ports) {
+            config[core].port = 0xff;
+            goto init_done;
+        }
         config[core].flags = FLAG_WAIT;
         config[core].port = port_map[core];
         rte_eth_macaddr_get(port_map[core], &config[core].port_mac);
@@ -592,6 +599,7 @@ main(int argc, char *argv[])
         rte_eal_remote_launch(lcore_init, (void*)&config[core], i);
         rte_eal_wait_lcore(i);
         rte_eal_remote_launch(launch_worker, (void*)&config[core], i);
+init_done:
         core++;
         port++;
     }
@@ -634,7 +642,7 @@ main(int argc, char *argv[])
             		printf("Failed to respond to request from scheduler.\n");
             	}
                 if (cmd.flags & FLAG_PRINT && send_stats(config, nb_ports, client_ip, control_port) == -1) {
-            		printf("Failed to send stats to scheduler.\n");
+                    printf("Failed to send stats to scheduler.\n");
                 }
 			} else {
                 printf("Failed to process request from scheduler.\n");
