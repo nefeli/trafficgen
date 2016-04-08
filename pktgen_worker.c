@@ -50,7 +50,7 @@ stats(double *start_time, struct rate_stats *r_stats)
 
     if (elapsed >= 1.0f) {
 #if GEN_DEBUG
-        printf("Core %u: tx_pps: %.0f tx_gbps: %.2f rx_pps: %.0f rx_gbps: %.2f\n",
+        syslog(LOG_INFO, "Core %u: tx_pps: %.0f tx_gbps: %.2f rx_pps: %.0f rx_gbps: %.2f\n",
                 rte_lcore_id(), tx_pps, tx_bps/1000000000.0f,
                 rx_pps, rx_bps / 1000000000.0f);
 #endif
@@ -231,10 +231,10 @@ worker_loop(struct pktgen_config *config)
 
     memset(samples, 0, sizeof(samples[0]) * 2 * num_samples);
 
-    printf("\nCore %u running.\n", rte_lcore_id());
+    syslog(LOG_INFO, "\nCore %u running.\n", rte_lcore_id());
 
     /* Flush the RX queue */
-    printf("Core %u: Flusing port %u RX queue\n", rte_lcore_id(), config->port);
+    syslog(LOG_INFO, "Core %u: Flusing port %u RX queue\n", rte_lcore_id(), config->port);
     while (rte_eth_rx_queue_count(config->port, 0) > 0) {
         nb_rx = rte_eth_rx_burst(config->port, 0, bufs, config->rx_ring_size);
         for (i = 0; i < nb_rx; i++) {
