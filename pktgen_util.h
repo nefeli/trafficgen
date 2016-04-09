@@ -47,6 +47,11 @@ setup_daemon(void)
     umask(0);   
 
     f = fopen("./pktgen.pid", "w+");
+
+    if (f == NULL) {
+        exit(EXIT_FAILURE);
+    }
+
     fprintf(f, "%d", getpid());
     fclose(f);
 
