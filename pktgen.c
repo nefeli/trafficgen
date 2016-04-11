@@ -340,8 +340,11 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
 		return -1;
 	}
 
+    unsigned old_flags = cmd->flags;
     cmd->flags &= !FLAG_PRINT;
-    cmd->flags &= !FLAG_WAIT;
+    if (!j->stop) {
+        cmd->flags &= !FLAG_WAIT;
+    }
     cmd->port_mac = zero_mac;
     cmd->src_mac = zero_mac;
     cmd->dst_mac = zero_mac;
@@ -370,8 +373,12 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
     if (j->online)
         cmd->flags |= FLAG_GENERATE_ONLINE;
 
-    if (j->stop)
+    if (j->stop) {
         cmd->flags |= FLAG_WAIT;
+        if (!(old_flags & FLAG_WAIT)) {
+            sem_wait(&cmd->stop_sempahore);
+        }
+    }
 
     if (j->print)
         cmd->flags |= (FLAG_PRINT | FLAG_WAIT);
@@ -479,7 +486,7 @@ main(int argc, char *argv[])
         config[core].flags = FLAG_WAIT;
         config[core].port = port_map[core];
         rte_eth_macaddr_get(port_map[core], &config[core].port_mac);
-
+        sem_init(&config[core].stop_sempahore, 0, 0);
         rte_eal_remote_launch(lcore_init, (void*)&config[core], i);
         rte_eal_wait_lcore(i);
         rte_eal_remote_launch(launch_worker, (void*)&config[core], i);

@@ -53,6 +53,6 @@ CFLAGS_main.o += -Wno-return-type
 endif
 
 EXTRA_CFLAGS += -O3 -g -Wfatal-errors
-EXTRA_LDFLAGS += -lreadline -lprotobuf-c
+EXTRA_LDFLAGS += -lreadline -lprotobuf-c -lm
 
 include $(RTE_SDK)/mk/rte.extapp.mk

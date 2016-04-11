@@ -354,6 +354,7 @@ worker_loop(struct pktgen_config *config)
 
             latency_calc(samples, sample_count, &r_stats);
         }
+        sem_post(&config->stop_sempahore);
         config->stats = r_stats;
 
         config->flags |= FLAG_WAIT; 

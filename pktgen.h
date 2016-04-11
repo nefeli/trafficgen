@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <signal.h>
+#include <semaphore.h>
 
 /* start demo stuff */
 #include <errno.h>
@@ -148,6 +149,8 @@ struct pktgen_config {
     struct ether_addr src_mac;
     struct ether_addr dst_mac;
     struct ether_addr port_mac;
+
+    sem_t stop_sempahore;
 };
 
 struct pkt {
