@@ -183,12 +183,14 @@ generate_packet(struct pkt *buf, struct pktgen_config *config,
         l4s = sizeof(struct tcp_hdr);
     }
 
-    memset(buf->data, 0, pkt_size - sizeof(struct ether_hdr) - sizeof(*ip_hdr) - l4s);
-    if (config->flags & FLAG_RANDOMIZE_PAYLOAD) {
-        unsigned r = 0;
-        while (r < pkt_size - sizeof(struct ether_hdr) - sizeof(*ip_hdr) - l4s) {
-            buf->data[r] = (uint8_t)rand_fast(&config->seed);
-            r++;
+    if (pkt_size > sizeof(struct ether_hdr) - sizeof(*ip_hdr) - l4s) {
+        memset(buf->data, 0, pkt_size - sizeof(struct ether_hdr) - sizeof(*ip_hdr) - l4s);
+        if (config->flags & FLAG_RANDOMIZE_PAYLOAD) {
+            unsigned r = 0;
+            while (r < pkt_size - sizeof(struct ether_hdr) - sizeof(*ip_hdr) - l4s) {
+                buf->data[r] = (uint8_t)rand_fast(&config->seed);
+                r++;
+            }
         }
     }
 }
@@ -246,6 +248,8 @@ worker_loop(struct pktgen_config *config)
             rte_delay_us(1);
         }
 
+        printf("Starting\n");
+        // Transitioning from start to stop.
         flow_ctrs = realloc(flow_ctrs, sizeof(uint16_t)*(config->num_flows + 1));
         flow_times = realloc(flow_times, sizeof(double)*(config->num_flows + 1));
         if (flow_ctrs == NULL || flow_times == NULL) {
@@ -347,6 +351,8 @@ worker_loop(struct pktgen_config *config)
             r_stats.tx_pkts += nb_tx;
         }
 
+        printf("Stopped\n");
+        // Transitions from run to stop
         if (r_stats.n > 0 && sample_count > 0) {
             r_stats.var_txpps /= (r_stats.n - 1); r_stats.var_rxpps /= (r_stats.n - 1);
             r_stats.var_txbps /= (r_stats.n - 1); r_stats.var_rxbps /= (r_stats.n - 1);
@@ -355,8 +361,11 @@ worker_loop(struct pktgen_config *config)
             latency_calc(samples, sample_count, &r_stats);
         }
         config->stats = r_stats;
-
-        config->flags |= FLAG_WAIT; 
+        if (config->flags & FLAG_WAIT) {
+	    sem_post(&config->stop_sempahore);
+	} else {
+	    config->flags |= FLAG_WAIT;
+	}
     }
 
     rte_delay_us(100);

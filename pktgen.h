@@ -12,6 +12,7 @@
 #include <stdio.h>
 #include <math.h>
 #include <signal.h>
+#include <semaphore.h>
 
 /* start demo stuff */
 #include <errno.h>
@@ -56,7 +57,7 @@
 #define MAX_PKT_SIZE 2048
 #define MPOOL_SIZE ((1<<16) - 1)
 
-#define GEN_DEBUG 0
+#define GEN_DEBUG 1
 #define GEN_KEY 0x1234
 #define GEN_DEFAULT_SEED 1234
 #define GEN_DEFAULT_RX_RING_SIZE 256
@@ -148,6 +149,8 @@ struct pktgen_config {
     struct ether_addr src_mac;
     struct ether_addr dst_mac;
     struct ether_addr port_mac;
+
+    sem_t stop_sempahore;
 };
 
 struct pkt {
