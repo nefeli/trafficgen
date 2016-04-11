@@ -340,11 +340,8 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
 		return -1;
 	}
 
-    unsigned old_flags = cmd->flags;
     cmd->flags &= !FLAG_PRINT;
-    if (!j->stop) {
-        cmd->flags &= !FLAG_WAIT;
-    }
+    cmd->flags &= !FLAG_WAIT;
     cmd->port_mac = zero_mac;
     cmd->src_mac = zero_mac;
     cmd->dst_mac = zero_mac;
@@ -373,12 +370,8 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
     if (j->online)
         cmd->flags |= FLAG_GENERATE_ONLINE;
 
-    if (j->stop) {
+    if (j->stop)
         cmd->flags |= FLAG_WAIT;
-        if (!(old_flags & FLAG_WAIT)) {
-            sem_wait(&cmd->stop_sempahore);
-        }
-    }
 
     if (j->print)
         cmd->flags |= (FLAG_PRINT | FLAG_WAIT);
@@ -425,7 +418,6 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
            cmd->flags & FLAG_PRINT);
 #endif
 	job__free_unpacked(j, NULL);
-	
     if (!(cmd->flags & FLAG_PRINT))
         return send_status(STATUS__TYPE__SUCCESS, ip, ctrl);
     else
@@ -529,6 +521,62 @@ init_done:
             	if (response_handler(fd_client, request, request_bytes, &cmd, client_ip, control_port) == -1) {
             		printf("Failed to respond to request from scheduler.\n");
             	}
+
+                /* Launch generator */
+                core = 0;
+                port = 0;
+                RTE_LCORE_FOREACH_SLAVE(i) {
+                    unsigned old_flags = 0;
+                    if (port == nb_ports) {
+                        break;
+                    }
+
+                    if (!is_zero_ether_addr(&cmd.port_mac) &&
+                        !is_same_ether_addr(&cmd.port_mac, &config[core].port_mac)) {
+                        goto launch_done;
+                    }
+                    config[core].tx_rate = cmd.tx_rate;
+                    config[core].warmup = cmd.warmup;
+                    config[core].duration = cmd.duration;
+                    config[core].num_flows = cmd.num_flows;
+                    config[core].ip_min = 0xAFCD0123;
+                    config[core].port_min = cmd.port_min;
+                    config[core].port_max = cmd.port_max;
+                    config[core].proto = cmd.proto;
+                    config[core].size_min = cmd.size_min;
+                    config[core].size_max = cmd.size_max;
+                    config[core].life_min = cmd.life_min;
+                    config[core].life_max = cmd.life_max;
+                    config[core].port = port_map[core];
+                    config[core].rx_ring_size = cmd.rx_ring_size;
+                    config[core].tx_ring_size = cmd.tx_ring_size;
+                    old_flags = __sync_lock_test_and_set(&config[core].flags, cmd.flags);
+                    // Previously we were waiting, but aren't anymore.
+                    if (!(old_flags & FLAG_WAIT) &&
+                         (cmd.flags & FLAG_WAIT)) {
+                        sem_wait(&config[core].stop_sempahore);
+                    }
+                    ether_addr_copy(&cmd.dst_mac, &config[core].dst_mac);
+#if 0
+                    printf("config[%u] job: {\n"
+                           "\ttx_rate: %u\n"
+                           "\twarmup: %u\n"
+                           "\tduration: %u\n"
+                           "\tnum_flows: %u\n"
+                           "\tsize_min: %u\n"
+                           "\tsize_max: %u\n"
+                           "\tlife_min: %f\n"
+                           "\tlife_max: %f\n"
+                           "\tflags: %u\n}\n", i,
+                           config[i].tx_rate, config[i].warmup, config[i].duration,
+                           config[i].num_flows, config[i].size_min, config[i].size_max,
+                           config[i].life_min, config[i].life_max, config[i].flags);
+#endif
+        launch_done:
+                    core++;
+                    port++;
+                }
+
                 if (cmd.flags & FLAG_PRINT && send_stats(config, nb_ports, client_ip, control_port) == -1) {
                     printf("Failed to send stats to scheduler.\n");
                 }
@@ -538,55 +586,6 @@ init_done:
 			close(fd_client);
         }
 
-        /* Launch generator */
-        core = 0;
-        port = 0;
-        RTE_LCORE_FOREACH_SLAVE(i) {
-            if (port == nb_ports) {
-                break;
-            }
-
-            if (!is_zero_ether_addr(&cmd.port_mac) &&
-                !is_same_ether_addr(&cmd.port_mac, &config[core].port_mac)) {
-                goto launch_done;
-            }
-
-            config[core].tx_rate = cmd.tx_rate;
-            config[core].warmup = cmd.warmup;
-            config[core].duration = cmd.duration;
-            config[core].num_flows = cmd.num_flows;
-            config[core].ip_min = 0xAFCD0123;
-            config[core].port_min = cmd.port_min;
-            config[core].port_max = cmd.port_max;
-            config[core].proto = cmd.proto;
-            config[core].size_min = cmd.size_min;
-            config[core].size_max = cmd.size_max;
-            config[core].life_min = cmd.life_min;
-            config[core].life_max = cmd.life_max;
-            config[core].port = port_map[core];
-            config[core].rx_ring_size = cmd.rx_ring_size;
-            config[core].tx_ring_size = cmd.tx_ring_size;
-            config[core].flags = cmd.flags;
-            ether_addr_copy(&cmd.dst_mac, &config[core].dst_mac);
-#if 0
-            printf("config[%u] job: {\n"
-                   "\ttx_rate: %u\n"
-                   "\twarmup: %u\n"
-                   "\tduration: %u\n"
-                   "\tnum_flows: %u\n"
-                   "\tsize_min: %u\n"
-                   "\tsize_max: %u\n"
-                   "\tlife_min: %f\n"
-                   "\tlife_max: %f\n"
-                   "\tflags: %u\n}\n", i,
-                   config[i].tx_rate, config[i].warmup, config[i].duration,
-                   config[i].num_flows, config[i].size_min, config[i].size_max,
-                   config[i].life_min, config[i].life_max, config[i].flags);
-#endif
-launch_done:
-            core++;
-            port++;
-        }
     }
     printf("\n");
     return 0;
