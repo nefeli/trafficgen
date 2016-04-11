@@ -257,6 +257,7 @@ worker_loop(struct pktgen_config *config)
         }
         memset(flow_times, 0, sizeof(double) * config->num_flows);
         memset(flow_ctrs, 0, sizeof(uint16_t) * config->num_flows);
+        memset(&r_stats, 0, sizeof(r_stats));
 
         run_id++;
         config->start_time = get_time_msec();
