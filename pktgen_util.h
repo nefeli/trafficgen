@@ -52,8 +52,10 @@ setup_daemon(void)
         exit(EXIT_FAILURE);
     }
 
-    fprintf(f, "%d", getpid());
-    fclose(f);
+    if (fprintf(f, "%d", getpid()) <= 0) {
+        fclose(f);    
+        exit(EXIT_FAILURE);
+    }
 
     if ((chdir("/")) < 0) {
         exit(EXIT_FAILURE);
