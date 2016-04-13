@@ -61,7 +61,7 @@ port_init(uint8_t port, struct pktgen_config *config UNUSED)
 
     struct ether_addr addr;
     rte_eth_macaddr_get(port, &addr);
-    printf("Port %u MAC: %02" PRIx8 " %02" PRIx8 " %02" PRIx8
+    syslog(LOG_INFO, "Port %u MAC: %02" PRIx8 " %02" PRIx8 " %02" PRIx8
             " %02" PRIx8 " %02" PRIx8 " %02" PRIx8 "\n",
             (unsigned)port,
             addr.addr_bytes[0], addr.addr_bytes[1],
@@ -80,7 +80,7 @@ lcore_init(void *arg)
     unsigned port = config->port;
     char name[7];
 
-    printf("Init core %d\n", rte_lcore_id());
+    syslog(LOG_INFO, "Init core %d", rte_lcore_id());
 
     config->seed = GEN_DEFAULT_SEED;
 
@@ -190,14 +190,14 @@ request_handler(int fd_client, char *request)
 	char len_buf[4];
 
 	if (read_n_bytes(fd_client, 4, len_buf) < 0) {
-		printf("Failed to read length of status.\n");
+		syslog(LOG_ERR, "Failed to read length of status.");
 	}
 	
     int32_t *x = (int32_t*)&len_buf;
 	req_len = ntohl(*x);
 
 	if (read_n_bytes(fd_client, req_len, request) < 0) {
-		printf("Failed to read status.\n");
+		syslog(LOG_ERR, "Failed to read status.");
 	}
 
 	return req_len;
@@ -214,7 +214,7 @@ send_status(int status, char *ip, int ctrl)
 	void *buf;
 
 	if (sock < 0) {
-		printf("Failed to connect to the scheduler to send status.\n");
+		syslog(LOG_ERR, "Failed to connect to the scheduler to send status.");
 		close(sock);
 		return -1;
 	}
@@ -232,7 +232,7 @@ send_status(int status, char *ip, int ctrl)
 	status__pack(&s, (void*)((uint8_t*)(buf)+4));
 	
 	if (send(sock, buf, len+4, 0) < 0) {
-		printf("Failed to send status to the scheduler.\n");
+		syslog(LOG_ERR, "Failed to send status to the scheduler.");
 		close(sock);
 		return -1;
 	}
@@ -253,7 +253,7 @@ send_stats(struct pktgen_config *configs, uint16_t n, char *ip, int ctrl)
     struct ether_addr port_addr;
 
 	if (sock < 0) {
-		printf("Failed to connect to the scheduler to send status.\n");
+		syslog(LOG_ERR, "Failed to connect to the scheduler to send status.\n");
 		close(sock);
 		return -1;
 	}
@@ -320,7 +320,7 @@ send_stats(struct pktgen_config *configs, uint16_t n, char *ip, int ctrl)
     }
 
 	if (send(sock, buf, len+4, 0) < 0) {
-		printf("Failed to send stats to the scheduler.\n");
+		syslog(LOG_ERR, "Failed to send stats to the scheduler.");
 		close(sock);
 		return -1;
 	}
@@ -336,7 +336,7 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
 	Job *j = job__unpack(NULL, request_bytes, (void*)request);
 
 	if (j == NULL) {
-		printf("Failed to unpack job.\n");
+		syslog(LOG_ERR, "Failed to unpack job.");
 		return -1;
 	}
 
@@ -427,20 +427,23 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
 int
 main(int argc, char *argv[])
 {
+
+    setup_daemon();
+
     int i;
     uint8_t nb_ports, port, nb_cores, core; 
     struct pktgen_config cmd;
 
     int ret = rte_eal_init(argc, argv);
     if (ret < 0) {
-        rte_exit(EXIT_FAILURE, "Error with EAL initialization\n");
+        rte_exit(EXIT_FAILURE, "Error with EAL initialization");
     }
 
     argc -= ret;
     argv += ret;
 
     if (argc < 1) {
-        rte_exit(EXIT_FAILURE, "Args: LISTEN_PORT\n");
+        rte_exit(EXIT_FAILURE, "Args: LISTEN_PORT");
     }
 
     nb_ports = rte_eth_dev_count();
@@ -457,12 +460,12 @@ main(int argc, char *argv[])
 
     int fd_server = create_and_bind_socket(argv[1]);
     if (fd_server < 0) {
-		rte_exit(EXIT_FAILURE, "Failed to create/bind to socket.\n");
+        rte_exit(EXIT_FAILURE, "Failed to create/bind to socket.");
 	}
 
     int control_port = atoi(argv[1]);
     if (listen(fd_server, BACKLOG) == -1) {
-        rte_exit(EXIT_FAILURE, "Failed to listen to socket.\n");
+        rte_exit(EXIT_FAILURE, "Failed to listen to socket.");
     }
 
     struct pktgen_config config[nb_cores];
@@ -519,7 +522,7 @@ init_done:
             client_ip = inet_ntoa(caddr->sin_addr);
             if ((request_bytes = request_handler(fd_client, request)) > 0) {
             	if (response_handler(fd_client, request, request_bytes, &cmd, client_ip, control_port) == -1) {
-            		printf("Failed to respond to request from scheduler.\n");
+            		syslog(LOG_ERR, "Failed to respond to request from scheduler.");
             	}
 
                 /* Launch generator */
@@ -578,15 +581,14 @@ init_done:
                 }
 
                 if (cmd.flags & FLAG_PRINT && send_stats(config, nb_ports, client_ip, control_port) == -1) {
-                    printf("Failed to send stats to scheduler.\n");
+                    syslog(LOG_ERR, "Failed to send stats to scheduler.");
                 }
 			} else {
-                printf("Failed to process request from scheduler.\n");
+                syslog(LOG_ERR, "Failed to process request from scheduler.");
 			}
 			close(fd_client);
         }
 
     }
-    printf("\n");
     return 0;
 }

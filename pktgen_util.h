@@ -7,6 +7,9 @@
 #include <rte_cycles.h>
 #include <rte_ether.h>
 #include <rte_mbuf.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <syslog.h>
 
 #define UNUSED __attribute__((__unused__))
 #define RTE_MBUF_FROM_BADDR(ba)     (((struct rte_mbuf *)(ba)) - 1)
@@ -14,6 +17,57 @@
 typedef struct rte_mbuf** mbuf_array_t;
 
 struct rte_mbuf tx_mbuf_template[RTE_MAX_LCORE];
+
+static void 
+setup_daemon(void)
+{
+
+    FILE *f;
+    pid_t pid;
+
+    pid = fork();
+    
+    if (pid < 0) {
+        exit(EXIT_FAILURE);
+    }
+    if (pid > 0) {
+        exit(EXIT_SUCCESS);
+    }
+    if (setsid() < 0) {
+        exit(EXIT_FAILURE);
+    }
+    pid = fork();
+    if (pid < 0) {
+        exit(EXIT_FAILURE);
+    }
+    if (pid > 0) {
+        exit(EXIT_SUCCESS);
+    }
+
+    umask(0);   
+
+    f = fopen("./pktgen.pid", "w+");
+
+    if (f == NULL) {
+        exit(EXIT_FAILURE);
+    }
+
+    if (fprintf(f, "%d", getpid()) <= 0) {
+        fclose(f);    
+        exit(EXIT_FAILURE);
+    }
+
+    if ((chdir("/")) < 0) {
+        exit(EXIT_FAILURE);
+    }
+
+    close(STDIN_FILENO);
+    close(STDOUT_FILENO);
+    close(STDERR_FILENO);
+
+    openlog("pktgen", LOG_PID, LOG_DAEMON);
+
+}
 
 /* Stolen from BESS
  * https://github.com/NetSys/bess/blob/develop/core/utils/random.h

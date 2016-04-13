@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include <x86intrin.h>
+#include <syslog.h>
 
 #define __xmm_aligned __attribute__((aligned(16)))
 #define __ymm_aligned __attribute__((aligned(32)))
@@ -21,7 +22,7 @@ print_m128i(__m128i a)
 	uint32_t b[4] __xmm_aligned;
 	
 	*((__m128i *) b) = a;
-	printf("%08x %08x %08x %08x\n", b[0], b[1], b[2], b[3]);
+	syslog(LOG_INFO, "%08x %08x %08x %08x\n", b[0], b[1], b[2], b[3]);
 }
 
 static inline __m128i
@@ -44,7 +45,7 @@ print_m256i(__m256i a)
 	uint32_t b[8] __ymm_aligned;
 	
 	*((__m256i *) b) = a;
-	printf("%08x %08x %08x %08x %08x %08x %08x %08x\n", 
+	syslog(LOG_INFO, "%08x %08x %08x %08x %08x %08x %08x %08x\n", 
 			b[0], b[1], b[2], b[3], b[4], b[5], b[6], b[7]);
 }
 
