@@ -342,8 +342,8 @@ worker_loop(struct pktgen_config *config)
 
             nb_tx = rte_eth_tx_burst(config->port, 0, bufs, burst);
 
-            if (likely(burst > 0))
-                rte_mempool_put_bulk(bufs[0]->pool, (void **)bufs, burst);
+            for (i = nb_tx; i < burst; i++)
+                rte_mempool_put(bufs[i]->pool, (void *)bufs[i]);
 
             for (i = 0; i < nb_tx; i++) {
                 r_stats.tx_bytes += lens[i];
@@ -363,10 +363,10 @@ worker_loop(struct pktgen_config *config)
         }
         config->stats = r_stats;
         if (config->flags & FLAG_WAIT) {
-	    sem_post(&config->stop_sempahore);
-	} else {
-	    config->flags |= FLAG_WAIT;
-	}
+            sem_post(&config->stop_sempahore);
+        } else {
+            config->flags |= FLAG_WAIT;
+        }
     }
 
     rte_delay_us(100);
