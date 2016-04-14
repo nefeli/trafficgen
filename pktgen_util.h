@@ -12,21 +12,20 @@
 #include <syslog.h>
 
 #define UNUSED __attribute__((__unused__))
-#define RTE_MBUF_FROM_BADDR(ba)     (((struct rte_mbuf *)(ba)) - 1)
+#define RTE_MBUF_FROM_BADDR(ba) (((struct rte_mbuf *)(ba)) - 1)
 
-typedef struct rte_mbuf** mbuf_array_t;
+typedef struct rte_mbuf **mbuf_array_t;
 
 struct rte_mbuf tx_mbuf_template[RTE_MAX_LCORE];
 
-static void 
+static void
 setup_daemon(void)
 {
-
     FILE *f;
     pid_t pid;
 
     pid = fork();
-    
+
     if (pid < 0) {
         exit(EXIT_FAILURE);
     }
@@ -44,7 +43,7 @@ setup_daemon(void)
         exit(EXIT_SUCCESS);
     }
 
-    umask(0);   
+    umask(0);
 
     f = fopen("./pktgen.pid", "w+");
 
@@ -53,7 +52,7 @@ setup_daemon(void)
     }
 
     if (fprintf(f, "%d", getpid()) <= 0) {
-        fclose(f);    
+        fclose(f);
         exit(EXIT_FAILURE);
     }
 
@@ -66,7 +65,6 @@ setup_daemon(void)
     close(STDERR_FILENO);
 
     openlog("pktgen", LOG_PID, LOG_DAEMON);
-
 }
 
 /* Stolen from BESS
@@ -75,16 +73,16 @@ setup_daemon(void)
 static inline uint32_t
 rand_fast(uint64_t *seed)
 {
-	uint64_t next_seed;
-	next_seed = *seed * 1103515245 + 12345;
-	*seed = next_seed;
-	return next_seed >> 32;
+    uint64_t next_seed;
+    next_seed = *seed * 1103515245 + 12345;
+    *seed = next_seed;
+    return next_seed >> 32;
 }
 
 static double
-randf (uint64_t *x, double low, double high)
+randf(uint64_t *x, double low, double high)
 {
-    return low + (float)rand_fast(x)/((double)(UINT64_MAX/(high-low)));
+    return low + (float)rand_fast(x) / ((double)(UINT64_MAX / (high - low)));
 }
 
 /* Misc. */
@@ -97,10 +95,10 @@ sig_handler(int sig UNUSED)
 static int
 double_compare(const void *a, const void *b)
 {
-    if (*(const double*)a > *(const double*)b) {
+    if (*(const double *)a > *(const double *)b) {
         return 1;
     }
-    if (*(const double*)a < *(const double*)b) {
+    if (*(const double *)a < *(const double *)b) {
         return -1;
     }
     return 0;
@@ -109,11 +107,11 @@ double_compare(const void *a, const void *b)
 static double
 get_time_msec(void)
 {
-    return 1000 * (rte_get_tsc_cycles() / (double) rte_get_tsc_hz());
+    return 1000 * (rte_get_tsc_cycles() / (double)rte_get_tsc_hz());
 }
 
-static inline
-struct rte_mbuf *current_template(void)
+static inline struct rte_mbuf *
+current_template(void)
 {
     return &tx_mbuf_template[rte_socket_id()];
 }
@@ -122,13 +120,8 @@ static inline int
 ether_addr_from_str(const char *str, struct ether_addr *addr)
 {
     int mac[6], ret, i;
-    ret = str == NULL ? 0 : sscanf(str, "%x:%x:%x:%x:%x:%x",
-            &mac[0],
-            &mac[1],
-            &mac[2],
-            &mac[3],
-            &mac[4],
-            &mac[5]);
+    ret = str == NULL ? 0 : sscanf(str, "%x:%x:%x:%x:%x:%x", &mac[0], &mac[1],
+                                   &mac[2], &mac[3], &mac[4], &mac[5]);
 
     if (ret != 6 || addr == NULL) {
         return -1;
@@ -147,12 +140,13 @@ ether_addr_from_str(const char *str, struct ether_addr *addr)
  *    cnt: Count
  */
 static int
-mbuf_alloc_bulk(struct rte_mempool *mp, mbuf_array_t array, uint16_t len, int cnt)
+mbuf_alloc_bulk(struct rte_mempool *mp, mbuf_array_t array, uint16_t len,
+                int cnt)
 {
     int ret;
     int i;
 
-    __m128i template;   /* 256-bit write was worse... */
+    __m128i template; /* 256-bit write was worse... */
     __m128i rxdesc_fields;
 
     struct rte_mbuf tmp;
@@ -165,19 +159,19 @@ mbuf_alloc_bulk(struct rte_mempool *mp, mbuf_array_t array, uint16_t len, int cn
      */
     rxdesc_fields = _mm_setr_epi32(0, len, len, 0);
 
-    ret = rte_mempool_get_bulk(mp, (void**)array, cnt);
+    ret = rte_mempool_get_bulk(mp, (void **)array, cnt);
     if (ret != 0) {
         return ret;
     }
 
-    template = *((__m128i*)&current_template()->buf_len);
+    template = *((__m128i *)&current_template()->buf_len);
 
     if (cnt & 1) {
         array[cnt] = &tmp;
     }
 
     /* 4 at a time didn't help */
-    for (i = 0; i < cnt; i+=2) {
+    for (i = 0; i < cnt; i += 2) {
         /* since the data is
          * likely to be in
          * the store buffer
@@ -191,12 +185,10 @@ mbuf_alloc_bulk(struct rte_mempool *mp, mbuf_array_t array, uint16_t len, int cn
         struct rte_mbuf *mbuf1 = array[i + 1];
 
         _mm_store_si128((__m128i *)&mbuf0->buf_len, template);
-        _mm_store_si128((__m128i *)&mbuf0->packet_type,
-                rxdesc_fields);
+        _mm_store_si128((__m128i *)&mbuf0->packet_type, rxdesc_fields);
 
         _mm_store_si128((__m128i *)&mbuf1->buf_len, template);
-        _mm_store_si128((__m128i *)&mbuf1->packet_type,
-                rxdesc_fields);
+        _mm_store_si128((__m128i *)&mbuf1->packet_type, rxdesc_fields);
     }
 
     if (cnt & 1)
