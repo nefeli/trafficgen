@@ -4,6 +4,7 @@
 #include "simd.h"
 
 #include <stdio.h>
+#include <rte_config.h>
 #include <rte_cycles.h>
 #include <rte_ether.h>
 #include <rte_mbuf.h>

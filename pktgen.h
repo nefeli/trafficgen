@@ -36,6 +36,7 @@
 #define BACKLOG 25
 /* end demo stuff */
 
+#include <rte_config.h>
 #include <rte_eal.h>
 #include <rte_random.h>
 #include <rte_errno.h>
