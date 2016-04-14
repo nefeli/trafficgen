@@ -10,15 +10,22 @@
 #include <rte_mbuf.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <syslog.h>
 
+#define DAEMON 1
 #define UNUSED __attribute__((__unused__))
 #define RTE_MBUF_FROM_BADDR(ba) (((struct rte_mbuf *)(ba)) - 1)
+
+#if DAEMON
+#include <syslog.h>
+#else
+#define syslog(priority, ...) printf(__VA_ARGS__)
+#endif
 
 typedef struct rte_mbuf **mbuf_array_t;
 
 struct rte_mbuf tx_mbuf_template[RTE_MAX_LCORE];
 
+#if DAEMON
 static void
 setup_daemon(void)
 {
@@ -67,6 +74,7 @@ setup_daemon(void)
 
     openlog("pktgen", LOG_PID, LOG_DAEMON);
 }
+#endif
 
 /* Stolen from BESS
  * https://github.com/NetSys/bess/blob/develop/core/utils/random.h

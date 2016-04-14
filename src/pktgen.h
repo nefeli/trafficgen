@@ -34,6 +34,7 @@
 #define SCHEDULER_PORT "1800"
 #define BUFSIZE 8192
 #define BACKLOG 25
+
 /* end demo stuff */
 
 #include <rte_config.h>
