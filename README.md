@@ -7,7 +7,7 @@ A minimal traffic generator.
 + libpcap
 
 ## Installation
-Just run `./build.sh`. Alternatively, setup DPDK yourself, just make sure to set
+Just run `make all`. Alternatively, setup DPDK yourself, just make sure to set
 `CONFIG_RTE_BUILD_COMBINE_LIBS=y`.
 
 ## Setting up DPDK
@@ -23,7 +23,7 @@ With that all done, bind each of your desired nics to DPDK with
 `/path/to/dpdk/tools/dpdk_nic_bind.py -b igb_uio YOUR_NIC`
 
 ## Usage
-Start things up with `./pktgen [EAL options] -- LISTEN_PORT`
+Start things up with `./bin/pktgen [EAL options] -- LISTEN_PORT`
 
 The only EAL flag you'll really need to tweak is the core mask `-c`. Set it so
 there is one more core than the number of ports you plan to use.
