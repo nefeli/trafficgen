@@ -1,3 +1,5 @@
+#include "pktgen.h"
+
 static uint16_t
 gen_pkt_size(struct pktgen_config *config)
 {

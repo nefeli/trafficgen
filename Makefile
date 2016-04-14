@@ -20,12 +20,14 @@ CFLAGS += -std=gnu99 -g3 -ggdb3 -Ofast -m64 -march=native \
 
 .PHONY: format
 
-pktgen: pktgen.c job.pb-c.c status.pb-c.c
+bin/pktgen: src/pktgen.c src/pktgen_worker.c src/protobufs/job.pb-c.c \
+	src/protobufs/status.pb-c.c
+	mkdir -p bin
 	${CC} ${CFLAGS} ${LDFLAGS} -o $@ $^ ${LIBS} 
 
 clean:
-	rm -f pktgen
+	rm -rf bin
 
-format: pktgen.h pktgen.c pktgen_worker.c pktgen_util.h \
-	job.pb-c.c status.pb-c.c simd.h
+format: src/pktgen.h src/pktgen.c src/pktgen_worker.c src/pktgen_util.h \
+	src/protobufs/job.pb-c.c src/protobufs/status.pb-c.c src/simd.h
 	clang-format -i $^

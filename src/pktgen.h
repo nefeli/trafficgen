@@ -26,8 +26,8 @@
 #include <fcntl.h>
 #include <sys/wait.h>
 
-#include "job.pb-c.h"
-#include "status.pb-c.h"
+#include "protobufs/job.pb-c.h"
+#include "protobufs/status.pb-c.h"
 
 #define PORT "1729"
 #define SCHEDULER_IP "127.0.0.1"
