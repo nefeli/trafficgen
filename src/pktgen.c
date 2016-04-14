@@ -454,24 +454,11 @@ main(int argc, char *argv[])
     uint8_t port_map[nb_cores];
 
     core = 0;
-    uint8_t lcore_active[256] = {0};
     for (port = 0; port < nb_ports; port++) {
         if (port_init(port, NULL) != 0) {
             rte_exit(EXIT_FAILURE, "Cannot init port %" PRIu8 "\n", port);
         }
-        uint8_t socket_id = rte_eth_dev_socket_id(port);
-        if (socket_id != 0 && socket_id != 1)
-            socket_id = 1;
-        RTE_LCORE_FOREACH_SLAVE(i)
-        {
-            uint8_t lcore_index = rte_lcore_index(i);
-            if (lcore_active[lcore_index] ||
-                rte_lcore_to_socket_id(i) != socket_id)
-                continue;
-            lcore_active[lcore_index] = 1;
-            port_map[lcore_index] = port;
-            break;
-        }
+        port_map[core++] = port;
     }
 
     int fd_server = create_and_bind_socket(argv[1]);
@@ -490,9 +477,6 @@ main(int argc, char *argv[])
     port = 0;
     RTE_LCORE_FOREACH_SLAVE(i)
     {
-        core = rte_lcore_index(i);
-        if (!lcore_active[core])
-            continue;
         memset(&config[core], 0, sizeof(struct pktgen_config));
         if (port >= nb_ports) {
             config[core].port = 0xff;
