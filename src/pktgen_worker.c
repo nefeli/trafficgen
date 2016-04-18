@@ -3,9 +3,9 @@
 static uint16_t
 gen_pkt_size(struct pktgen_config *config)
 {
-    return (uint16_t)rand_fast(&config->seed) %
-               (RTE_MAX(config->size_max - config->size_min, 1)) +
-           config->size_min;
+    return config->size_min +
+           rand_fast(&config->seed) %
+               (RTE_MAX(config->size_max - config->size_min, 1));
 }
 
 static void
@@ -17,6 +17,7 @@ stats(double *start_time, struct rate_stats *r_stats)
     double tx_pps = r_stats->tx_pkts / elapsed;
     double rx_bps = (8 * r_stats->rx_bytes) / elapsed;
     double rx_pps = r_stats->rx_pkts / elapsed;
+    double txwire, rxwire;
 
     r_stats->n++;
     /* update tx bps mean/var */
@@ -30,10 +31,10 @@ stats(double *start_time, struct rate_stats *r_stats)
     r_stats->var_txpps += delta * (tx_pps / 1000000 - r_stats->avg_txpps);
 
     /* update tx wire rate mean/var */
-    double wire = ((tx_bps / 1000000) + ((tx_pps / 1000000) * 20 * 8));
-    delta = wire - r_stats->avg_txwire;
+    txwire = ((tx_bps / 1000000) + ((tx_pps / 1000000) * ETH_OVERHEAD * 8));
+    delta = txwire - r_stats->avg_txwire;
     r_stats->avg_txwire += delta / r_stats->n;
-    r_stats->var_txwire += delta * (wire - r_stats->avg_txwire);
+    r_stats->var_txwire += delta * (txwire - r_stats->avg_txwire);
 
     /* update rx bps mean/var */
     delta = rx_bps / 1000000 - r_stats->avg_rxbps;
@@ -46,18 +47,17 @@ stats(double *start_time, struct rate_stats *r_stats)
     r_stats->var_rxpps += delta * (rx_pps / 1000000 - r_stats->avg_rxpps);
 
     /* update rx wire rate mean/var */
-    wire = ((rx_bps / 1000000) + ((rx_pps / 1000000) * 20 * 8));
-    delta = wire - r_stats->avg_rxwire;
+    rxwire = ((rx_bps / 1000000) + ((rx_pps / 1000000) * ETH_OVERHEAD * 8));
+    delta = rxwire - r_stats->avg_rxwire;
     r_stats->avg_rxwire += delta / r_stats->n;
-    r_stats->var_rxwire += delta * (wire - r_stats->avg_rxwire);
+    r_stats->var_rxwire += delta * (rxwire - r_stats->avg_rxwire);
 
-    if (elapsed >= 1.0f) {
-#if GEN_DEBUG
-        syslog(
-            LOG_INFO,
-            "Core %u: tx_pps: %.0f tx_gbps: %.2f rx_pps: %.0f rx_gbps: %.2f\n",
-            rte_lcore_id(), tx_pps, tx_bps / 1000000000.0f, rx_pps,
-            rx_bps / 1000000000.0f);
+    if (elapsed >= .1f) {
+#ifndef NDEBUG
+        syslog(LOG_INFO,
+               "[lcore=%u] rx/tx stats: mpps=%.3f/%.3f wire_mbps=%.1f/%.1f\n",
+               rte_lcore_id(), rx_pps / 1000000, tx_pps / 1000000, rxwire,
+               txwire);
 #endif
         r_stats->rx_pkts = 0;
         r_stats->rx_bytes = 0;
@@ -149,7 +149,7 @@ generate_packet(struct pkt *buf, struct pktgen_config *config,
 
     ip_hdr = &buf->ip_hdr;
     ip_hdr->total_length =
-        rte_cpu_to_be_16(pkt_size - 4 - sizeof(struct ether_hdr));
+        rte_cpu_to_be_16(pkt_size - sizeof(struct ether_hdr));
     ip_hdr->hdr_checksum = 0;
 
     flow = num_flows > 0 ? 1 + rand_fast(&config->seed) % num_flows : 0;
@@ -169,7 +169,7 @@ generate_packet(struct pkt *buf, struct pktgen_config *config,
         rte_cpu_to_be_32(flow_ctrs[flow] * (flow ^ GEN_KEY) * config->ip_min);
 
     ip_hdr->total_length =
-        rte_cpu_to_be_16(pkt_size - 4 - sizeof(struct ether_hdr));
+        rte_cpu_to_be_16(pkt_size - sizeof(struct ether_hdr));
     ip_hdr->hdr_checksum = rte_ipv4_cksum(ip_hdr);
 
     uint16_t sport = rte_cpu_to_be_16(ip_hdr->dst_addr % 0x1111);
@@ -184,7 +184,7 @@ generate_packet(struct pkt *buf, struct pktgen_config *config,
         udp_hdr->dst_port = dport;
         udp_hdr->dgram_cksum = 0;
         udp_hdr->dgram_len = rte_cpu_to_be_16(
-            pkt_size - 4 - sizeof(struct ether_hdr) - sizeof(*ip_hdr));
+            pkt_size - sizeof(struct ether_hdr) - sizeof(*ip_hdr));
         l4s = sizeof(struct udp_hdr);
     } else {
         tcp_hdr = &buf->tcp_hdr;
@@ -195,6 +195,7 @@ generate_packet(struct pkt *buf, struct pktgen_config *config,
         l4s = sizeof(struct tcp_hdr);
     }
 
+    // FIXME: data's offset is bad because of the use of union
     if (pkt_size > sizeof(struct ether_hdr) - sizeof(*ip_hdr) - l4s) {
         memset(buf->data, 0,
                pkt_size - sizeof(struct ether_hdr) - sizeof(*ip_hdr) - l4s);
@@ -215,60 +216,22 @@ worker_loop(struct pktgen_config *config)
 {
     struct pkt tx_template;
     struct rte_mempool *tx_pool = config->tx_pool;
-    uint32_t nb_tx, nb_rx, i, sample_count = 0, num_samples = NUM_SAMPLES;
-    struct rte_mbuf *bufs[NUM_PKTS + 1];
-    double now, start_time = get_time_msec(),
-                *samples = (double *)malloc(2 * num_samples * sizeof(double));
+    uint32_t nb_tx, nb_rx, i, num_samples = NUM_SAMPLES;
+    struct rte_mbuf *bufs[BURST_SIZE];
+    double now, start_time,
+        *samples = (double *)malloc(num_samples * sizeof(double));
     int64_t burst;
-    uint64_t total_rx = 0;
     uint8_t run_id = 0;
 
-    struct rate_stats r_stats = {.n = 0,
-                                 .avg_rxpps = 0,
-                                 .var_rxpps = 0,
-                                 .avg_rxbps = 0,
-                                 .var_rxbps = 0,
-                                 .avg_txpps = 0,
-                                 .var_txpps = 0,
-                                 .avg_txbps = 0,
-                                 .var_txbps = 0,
-                                 .avg_txwire = 0,
-                                 .var_txwire = 0,
-                                 .avg_rxwire = 0,
-                                 .var_rxwire = 0,
-                                 .tx_bytes = 0,
-                                 .tx_pkts = 0,
-                                 .rx_bytes = 0,
-                                 .rx_pkts = 0};
-
-    while (config->flags & FLAG_WAIT) {
-        rte_delay_us(1);
-    }
-
+    struct rate_stats r_stats = {0};
     double *flow_times = NULL;
     uint16_t *flow_ctrs = NULL;
 
-    memset(samples, 0, sizeof(samples[0]) * 2 * num_samples);
-
-    syslog(LOG_INFO, "\nCore %u running.\n", rte_lcore_id());
-
-    /* Flush the RX queue */
-    syslog(LOG_INFO, "Core %u: Flusing port %u RX queue\n", rte_lcore_id(),
-           config->port);
-    while (rte_eth_rx_queue_count(config->port, 0) > 0) {
-        nb_rx = rte_eth_rx_burst(config->port, 0, bufs, config->rx_ring_size);
-        for (i = 0; i < nb_rx; i++) {
-            rte_pktmbuf_free(bufs[i]);
-        }
-        rte_delay_us(10);
-    }
-
     for (;;) {
         while (config->flags & FLAG_WAIT) {
-            rte_delay_us(1);
+            usleep(1000);
         }
 
-        printf("Starting\n");
         // Transitioning from start to stop.
         flow_ctrs =
             realloc(flow_ctrs, sizeof(uint16_t) * (config->num_flows + 1));
@@ -280,39 +243,44 @@ worker_loop(struct pktgen_config *config)
         memset(flow_times, 0, sizeof(double) * config->num_flows);
         memset(flow_ctrs, 0, sizeof(uint16_t) * config->num_flows);
         memset(&r_stats, 0, sizeof(r_stats));
+        memset(samples, 0, sizeof(double) * num_samples);
+        uint64_t total_rx = 0;
+        uint32_t sample_count = 0;
+        double elapsed = 0;
+
+        int reset_pending = 1;
 
         run_id++;
         config->start_time = get_time_msec();
         generate_packet_init(&tx_template, config);
-        while (!(config->flags & FLAG_WAIT) &&
-               unlikely((now = get_time_msec()) - config->start_time <
-                        config->duration)) {
-            if (now - config->start_time > config->warmup) {
+
+        /* Flush the RX queue */
+        while ((nb_rx = rte_eth_rx_burst(config->port, 0, bufs, BURST_SIZE)) >
+               0) {
+            rte_mempool_put_bulk(bufs[0]->pool, (void **)bufs, nb_rx);
+            rte_delay_us(10);
+        }
+
+        while (!(config->flags & FLAG_WAIT)) {
+            now = get_time_msec();
+            elapsed = now - config->start_time;
+            if (unlikely(elapsed > config->duration)) {
+                break;
+            } else if (unlikely(elapsed > config->warmup && reset_pending)) {
+                start_time = now;
+                total_rx = 0;
+                sample_count = 0;
+                reset_pending = 0;
+                memset(&r_stats, 0, sizeof(r_stats));
+            } else if (unlikely(now - start_time > 0.5f)) {
                 stats(&start_time, &r_stats);
             }
-
-            uint64_t exp_bytes =
-                ((now - start_time) / 1000) * config->tx_rate * 1000000 / 8;
-            int64_t avg_pkt = (r_stats.tx_bytes + 1) / (r_stats.tx_pkts + 1);
-            burst = (exp_bytes - r_stats.tx_bytes);
-            burst /= avg_pkt;
-            burst = RTE_MIN(burst, (unsigned)BURST_SIZE);
-            burst = RTE_MAX((unsigned)0, burst);
 
             nb_rx = rte_eth_rx_burst(config->port, 0, bufs, BURST_SIZE);
 
             for (i = 0; i < nb_rx; i++) {
-#if 0
-                struct ether_addr addr;
-                rte_eth_macaddr_get(config->port, &addr);
-                struct ether_hdr *eth_hdr = rte_pktmbuf_mtod(bufs[i], struct ether_hdr *);
+                r_stats.rx_bytes += bufs[i]->pkt_len;
 
-                if (!is_same_ether_addr(&addr, &eth_hdr->d_addr)) {
-                    continue;
-                }
-#endif
-
-                r_stats.rx_bytes += bufs[i]->pkt_len + ETH_OVERHEAD;
                 if (config->flags & FLAG_MEASURE_LATENCY) {
                     uint64_t idx = 0;
                     if ((idx = total_rx) < num_samples ||
@@ -327,17 +295,30 @@ worker_loop(struct pktgen_config *config)
                             samples[idx] = (now - *ts) / 1000;
                             sample_count =
                                 RTE_MIN(num_samples, sample_count + 1);
+                            total_rx++;
+                        } else {
+                            syslog(LOG_ERR,
+                                   "[port=%d] received packet from run %d "
+                                   "instead of %d",
+                                   config->port, *p, run_id);
                         }
                     }
-                    total_rx++;
                 }
                 r_stats.rx_pkts++;
             }
 
-            if (likely(nb_rx > 0))
+            if (likely(nb_rx > 0)) {
                 rte_mempool_put_bulk(bufs[0]->pool, (void **)bufs, nb_rx);
+            }
 
-            now = get_time_msec();
+            uint64_t exp_bytes =
+                ((now - start_time) / 1000) * config->tx_rate * 1000000 / 8;
+            int64_t avg_pkt = (r_stats.tx_bytes + 1) / (r_stats.tx_pkts + 1);
+            burst = (exp_bytes - r_stats.tx_bytes);
+            burst /= avg_pkt;
+            burst = RTE_MIN(burst, (unsigned)BURST_SIZE);
+            burst = RTE_MAX((unsigned)0, burst);
+
             uint32_t lens[burst];
             if (unlikely(mbuf_alloc_bulk(tx_pool, bufs, MAX_PKT_SIZE, burst) !=
                          0)) {
@@ -348,16 +329,15 @@ worker_loop(struct pktgen_config *config)
             tx_template.size = pkt_size;
             generate_packet(&tx_template, config, flow_times, flow_ctrs, now);
             for (i = 0; i < burst; i++) {
-                lens[i] = pkt_size + ETH_OVERHEAD;
+                lens[i] = pkt_size;
 
                 struct rte_mbuf *buf = bufs[i];
-                buf->pkt_len = pkt_size - 4;
-                buf->data_len = pkt_size - 4;
+                buf->pkt_len = pkt_size;
+                buf->data_len = pkt_size;
                 buf->nb_segs = 1;
 
                 rte_memcpy((uint8_t *)buf->buf_addr + buf->data_off,
-                           (uint8_t *)&tx_template + sizeof(uint16_t),
-                           pkt_size);
+                           (uint8_t *)&tx_template.eth_hdr, pkt_size);
 
                 if (config->flags & FLAG_MEASURE_LATENCY) {
                     uint8_t *p = rte_pktmbuf_mtod_offset(
@@ -371,8 +351,10 @@ worker_loop(struct pktgen_config *config)
 
             nb_tx = rte_eth_tx_burst(config->port, 0, bufs, burst);
 
-            for (i = nb_tx; i < burst; i++)
-                rte_mempool_put(bufs[i]->pool, (void *)bufs[i]);
+            if (likely(nb_tx < burst)) {
+                rte_mempool_put_bulk(bufs[nb_tx]->pool, (void **)&bufs[nb_tx],
+                                     burst - nb_tx);
+            }
 
             for (i = 0; i < nb_tx; i++) {
                 r_stats.tx_bytes += lens[i];
@@ -380,8 +362,8 @@ worker_loop(struct pktgen_config *config)
 
             r_stats.tx_pkts += nb_tx;
         }
+        stats(&start_time, &r_stats);
 
-        printf("Stopped\n");
         // Transitions from run to stop
         if (r_stats.n > 0 && sample_count > 0) {
             r_stats.var_txpps /= (r_stats.n - 1);
@@ -402,10 +384,6 @@ worker_loop(struct pktgen_config *config)
     }
 
     rte_delay_us(100);
-
-    for (i = 0; i < NUM_PKTS; i++) {
-        rte_pktmbuf_free(bufs[i]);
-    }
 
     free(samples);
 }
