@@ -18,7 +18,8 @@ _sym_db = _symbol_database.Default()
 DESCRIPTOR = _descriptor.FileDescriptor(
   name='job.proto',
   package='',
-  serialized_pb=_b('\n\tjob.proto\"\xc5\x02\n\x03Job\x12\x0f\n\x07tx_rate\x18\x01 \x01(\x05\x12\x10\n\x08\x64uration\x18\x02 \x01(\x05\x12\x0e\n\x06warmup\x18\x03 \x01(\x05\x12\x11\n\tnum_flows\x18\x04 \x01(\x05\x12\x10\n\x08port_min\x18\x05 \x01(\x05\x12\x10\n\x08port_max\x18\x06 \x01(\x05\x12\x10\n\x08size_min\x18\x07 \x01(\x05\x12\x10\n\x08size_max\x18\x08 \x01(\x05\x12\x10\n\x08life_min\x18\t \x01(\x02\x12\x10\n\x08life_max\x18\n \x01(\x02\x12\x11\n\trandomize\x18\x0b \x01(\x08\x12\x0f\n\x07latency\x18\x0c \x01(\x08\x12\x0e\n\x06online\x18\r \x01(\x08\x12\x0c\n\x04stop\x18\x0e \x01(\x08\x12\r\n\x05print\x18\x0f \x01(\x08\x12\x0b\n\x03tcp\x18\x10 \x01(\x08\x12\x0f\n\x07src_mac\x18\x11 \x01(\t\x12\x0f\n\x07\x64st_mac\x18\x12 \x01(\t\x12\x0c\n\x04port\x18\x13 \x01(\t')
+  syntax='proto2',
+  serialized_pb=_b('\n\tjob.proto\"\xc5\x02\n\x03Job\x12\x0f\n\x07tx_rate\x18\x01 \x01(\x05\x12\x10\n\x08\x64uration\x18\x02 \x01(\x05\x12\x0e\n\x06warmup\x18\x03 \x01(\x05\x12\x11\n\tnum_flows\x18\x04 \x01(\x05\x12\x10\n\x08port_min\x18\x05 \x01(\x05\x12\x10\n\x08port_max\x18\x06 \x01(\x05\x12\x10\n\x08size_min\x18\x07 \x01(\x05\x12\x10\n\x08size_max\x18\x08 \x01(\x05\x12\x10\n\x08life_min\x18\t \x01(\x02\x12\x10\n\x08life_max\x18\n \x01(\x02\x12\x11\n\trandomize\x18\x0b \x01(\x08\x12\x0f\n\x07latency\x18\x0c \x01(\x08\x12\x0e\n\x06online\x18\r \x01(\x08\x12\x0c\n\x04stop\x18\x0e \x01(\x08\x12\r\n\x05print\x18\x0f \x01(\x08\x12\x0b\n\x03tcp\x18\x10 \x01(\x08\x12\x0f\n\x07src_mac\x18\x11 \x01(\t\x12\x0f\n\x07\x64st_mac\x18\x12 \x01(\t\x12\x0c\n\x04port\x18\x13 \x01(\t\"\x1d\n\x07Request\x12\x12\n\x04jobs\x18\x01 \x03(\x0b\x32\x04.Job')
 )
 _sym_db.RegisterFileDescriptor(DESCRIPTOR)
 
@@ -173,6 +174,7 @@ _JOB = _descriptor.Descriptor(
   ],
   options=None,
   is_extendable=False,
+  syntax='proto2',
   extension_ranges=[],
   oneofs=[
   ],
@@ -180,7 +182,40 @@ _JOB = _descriptor.Descriptor(
   serialized_end=339,
 )
 
+
+_REQUEST = _descriptor.Descriptor(
+  name='Request',
+  full_name='Request',
+  filename=None,
+  file=DESCRIPTOR,
+  containing_type=None,
+  fields=[
+    _descriptor.FieldDescriptor(
+      name='jobs', full_name='Request.jobs', index=0,
+      number=1, type=11, cpp_type=10, label=3,
+      has_default_value=False, default_value=[],
+      message_type=None, enum_type=None, containing_type=None,
+      is_extension=False, extension_scope=None,
+      options=None),
+  ],
+  extensions=[
+  ],
+  nested_types=[],
+  enum_types=[
+  ],
+  options=None,
+  is_extendable=False,
+  syntax='proto2',
+  extension_ranges=[],
+  oneofs=[
+  ],
+  serialized_start=341,
+  serialized_end=370,
+)
+
+_REQUEST.fields_by_name['jobs'].message_type = _JOB
 DESCRIPTOR.message_types_by_name['Job'] = _JOB
+DESCRIPTOR.message_types_by_name['Request'] = _REQUEST
 
 Job = _reflection.GeneratedProtocolMessageType('Job', (_message.Message,), dict(
   DESCRIPTOR = _JOB,
@@ -188,6 +223,13 @@ Job = _reflection.GeneratedProtocolMessageType('Job', (_message.Message,), dict(
   # @@protoc_insertion_point(class_scope:Job)
   ))
 _sym_db.RegisterMessage(Job)
+
+Request = _reflection.GeneratedProtocolMessageType('Request', (_message.Message,), dict(
+  DESCRIPTOR = _REQUEST,
+  __module__ = 'job_pb2'
+  # @@protoc_insertion_point(class_scope:Request)
+  ))
+_sym_db.RegisterMessage(Request)
 
 
 # @@protoc_insertion_point(module_scope)

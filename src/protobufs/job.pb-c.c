@@ -45,6 +45,44 @@ job__free_unpacked(Job *message, ProtobufCAllocator *allocator)
     assert(message->base.descriptor == &job__descriptor);
     protobuf_c_message_free_unpacked((ProtobufCMessage *)message, allocator);
 }
+void
+request__init(Request *message)
+{
+    static Request init_value = REQUEST__INIT;
+    *message = init_value;
+}
+size_t
+request__get_packed_size(const Request *message)
+{
+    assert(message->base.descriptor == &request__descriptor);
+    return protobuf_c_message_get_packed_size(
+        (const ProtobufCMessage *)(message));
+}
+size_t
+request__pack(const Request *message, uint8_t *out)
+{
+    assert(message->base.descriptor == &request__descriptor);
+    return protobuf_c_message_pack((const ProtobufCMessage *)message, out);
+}
+size_t
+request__pack_to_buffer(const Request *message, ProtobufCBuffer *buffer)
+{
+    assert(message->base.descriptor == &request__descriptor);
+    return protobuf_c_message_pack_to_buffer((const ProtobufCMessage *)message,
+                                             buffer);
+}
+Request *
+request__unpack(ProtobufCAllocator *allocator, size_t len, const uint8_t *data)
+{
+    return (Request *)protobuf_c_message_unpack(&request__descriptor, allocator,
+                                                len, data);
+}
+void
+request__free_unpacked(Request *message, ProtobufCAllocator *allocator)
+{
+    assert(message->base.descriptor == &request__descriptor);
+    protobuf_c_message_free_unpacked((ProtobufCMessage *)message, allocator);
+}
 static const ProtobufCFieldDescriptor job__field_descriptors[19] = {
     {
         "tx_rate", 1, PROTOBUF_C_LABEL_OPTIONAL, PROTOBUF_C_TYPE_INT32,
@@ -194,6 +232,35 @@ const ProtobufCMessageDescriptor job__descriptor = {
     1,
     job__number_ranges,
     (ProtobufCMessageInit)job__init,
+    NULL,
+    NULL,
+    NULL /* reserved[123] */
+};
+static const ProtobufCFieldDescriptor request__field_descriptors[1] = {
+    {
+        "jobs", 1, PROTOBUF_C_LABEL_REPEATED, PROTOBUF_C_TYPE_MESSAGE,
+        offsetof(Request, n_jobs), offsetof(Request, jobs), &job__descriptor,
+        NULL, 0,      /* flags */
+        0, NULL, NULL /* reserved1,reserved2, etc */
+    },
+};
+static const unsigned request__field_indices_by_name[] = {
+    0, /* field[0] = jobs */
+};
+static const ProtobufCIntRange request__number_ranges[1 + 1] = {{1, 0}, {0, 1}};
+const ProtobufCMessageDescriptor request__descriptor = {
+    PROTOBUF_C__MESSAGE_DESCRIPTOR_MAGIC,
+    "Request",
+    "Request",
+    "Request",
+    "",
+    sizeof(Request),
+    1,
+    request__field_descriptors,
+    request__field_indices_by_name,
+    1,
+    request__number_ranges,
+    (ProtobufCMessageInit)request__init,
     NULL,
     NULL,
     NULL /* reserved[123] */

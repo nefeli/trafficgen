@@ -34,7 +34,6 @@
 #define SCHEDULER_PORT "1800"
 #define BUFSIZE 8192
 #define BACKLOG 25
-
 /* end demo stuff */
 
 #include <rte_config.h>
@@ -54,15 +53,15 @@
 #include <rte_memcpy.h>
 #include <rte_malloc.h>
 
-#define NUM_PKTS 32
 #define BURST_SIZE 32
 #define MAX_PKT_SIZE 2048
-#define MPOOL_SIZE ((1 << 16) - 1)
+#define MPOOL_SIZE (1 << 16) - 1
 
+#define MAX_CMD 16
 #define GEN_DEBUG 1
 #define GEN_KEY 0x1234
 #define GEN_DEFAULT_SEED 1234
-#define GEN_DEFAULT_RX_RING_SIZE 256
+#define GEN_DEFAULT_RX_RING_SIZE 512
 #define GEN_DEFAULT_TX_RING_SIZE 256
 
 #define ETH_PREAMBLE 7
@@ -71,13 +70,15 @@
 #define ETH_GAP 12
 #define ETH_OVERHEAD (ETH_PREAMBLE + ETH_START_OF_FRAME + ETH_FCS + ETH_GAP)
 
-#define FLAG_MEASURE_LATENCY 1
-#define FLAG_RANDOMIZE_PAYLOAD (1 << 1)
-#define FLAG_GENERATE_ONLINE (1 << 2)
-#define FLAG_LIMIT_FLOW_LIFE (1 << 3)
-#define FLAG_WAIT (1 << 4)
-#define FLAG_UPDATE (1 << 5)
-#define FLAG_PRINT (1 << 6)
+#define FLAG_MEASURE_LATENCY 1 << 0
+#define FLAG_RANDOMIZE_PAYLOAD 1 << 1
+#define FLAG_GENERATE_ONLINE 1 << 2
+#define FLAG_LIMIT_FLOW_LIFE 1 << 3
+#define FLAG_WAIT 1 << 4
+#define FLAG_UPDATE 1 << 5
+#define FLAG_PRINT 1 << 6
+
+#define NUM_SAMPLES 100000
 
 struct rate_stats {
     uint64_t n;
@@ -111,10 +112,22 @@ struct rate_stats {
     uint64_t tx_pkts;
     uint64_t rx_bytes;
     uint64_t rx_pkts;
+
+    uint32_t nb_samples;
+
+    uint16_t *flow_ctrs;
+    double *flow_times;
+    double *samples;
 };
 
 struct pktgen_config {
-    uint8_t port;
+    uint8_t active;
+
+    uint8_t run_id;
+    uint8_t lcore_id;
+    uint8_t socket_id;
+    uint8_t port_id;
+
     uint8_t role;
 
     uint32_t tx_rate;
@@ -164,7 +177,7 @@ struct pkt {
         struct udp_hdr udp_hdr;
         struct tcp_hdr tcp_hdr;
     };
-    uint8_t data[2048];
+    uint8_t dummy[2048];
 };
 
 static const struct rte_eth_conf port_conf_default = {

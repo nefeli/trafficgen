@@ -311,12 +311,26 @@ class Node(object):
         """
         return '(%s, %s)' % (str(self.ip), str(self.port))
 
+class Request(object):
+    """
+    Represents a job to be passed to nodes.
+    """
+    def __init__(self, priority, jobs):
+        self.priority = priority
+        self.request = job_pb2.Request()
+        self.request.jobs.extend([j.job for j in jobs])
+
+    def pack(self):
+        """
+        Serialize Job to string to be sent to nodes.
+        """
+        return self.request.SerializeToString()
+
 class Job(object):
     """
     Represents a job to be passed to nodes.
     """
-    def __init__(self, priority, data):
-        self.priority = priority
+    def __init__(self, data):
         self.job = self.load_job(data)
 
     def load_job(self, data):

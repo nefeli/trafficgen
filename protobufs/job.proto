@@ -21,3 +21,7 @@ message Job {
     optional string dst_mac = 18;
     optional string port = 19;
 }
+
+message Request {
+    repeated Job jobs = 1;
+}

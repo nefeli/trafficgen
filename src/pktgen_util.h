@@ -8,10 +8,8 @@
 #include <rte_cycles.h>
 #include <rte_ether.h>
 #include <rte_mbuf.h>
-#include <rte_ethdev.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <syslog.h>
 
 #define DAEMON 0
 #define UNUSED __attribute__((__unused__))
@@ -90,10 +88,16 @@ rand_fast(uint64_t *seed)
     return next_seed >> 32;
 }
 
-static double
+static inline double
+to_double(uint32_t rnd, double low, double high)
+{
+    return low + rnd * (high - low) / (double)(UINT32_MAX);
+}
+
+static inline double
 randf(uint64_t *x, double low, double high)
 {
-    return low + (float)rand_fast(x) / ((double)(UINT64_MAX / (high - low)));
+    return to_double(rand_fast(x), low, high);
 }
 
 /* Misc. */
@@ -150,7 +154,7 @@ ether_addr_from_str(const char *str, struct ether_addr *addr)
  *    len: Length
  *    cnt: Count
  */
-static int
+static inline int
 mbuf_alloc_bulk(struct rte_mempool *mp, mbuf_array_t array, uint16_t len,
                 int cnt)
 {
@@ -207,10 +211,4 @@ mbuf_alloc_bulk(struct rte_mempool *mp, mbuf_array_t array, uint16_t len,
     return 0;
 }
 
-static inline int
-eth_dev_scoket_id(uint8_t port)
-{
-    int socket_id = rte_eth_dev_socket_id(port);
-    return socket_id > 0 ? socket_id : 1;
-}
 #endif

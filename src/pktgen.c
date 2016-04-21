@@ -1,78 +1,114 @@
 #include "pktgen.h"
 #include "pktgen_worker.c"
 
+#include <assert.h>
+
 static inline int
-port_init(uint8_t port, struct pktgen_config *config UNUSED)
+port_init(struct pktgen_config *config)
 {
     struct rte_eth_conf port_conf = port_conf_default;
+    struct rte_eth_fc_conf fc_conf;
+
     const uint16_t rx_rings = 1, tx_rings = 1;
     int retval;
     uint16_t q;
-    char name[7];
+    char name[8];
 
-    rte_eth_dev_stop(port);
+    rte_eth_dev_stop(config->port_id);
 
-    snprintf(name, sizeof(name), "RX%02u:%02u", port, (unsigned)0);
-    struct rte_mempool *rx_mp = rte_pktmbuf_pool_create(
-        name, 2 * GEN_DEFAULT_RX_RING_SIZE, 0, 0, RTE_MBUF_DEFAULT_BUF_SIZE,
-        eth_dev_scoket_id(port));
-    if (rx_mp == NULL) {
+    config->seed = GEN_DEFAULT_SEED;
+
+    uint8_t socket_id = rte_eth_dev_socket_id(config->port_id);
+    assert(socket_id == 0 || socket_id == 1);
+    config->socket_id = socket_id;
+
+    snprintf(name, sizeof(name), "RX%02u:%02u", config->port_id, (unsigned)0);
+    config->rx_pool =
+        rte_pktmbuf_pool_create(name, 2 * GEN_DEFAULT_RX_RING_SIZE, 0, 0,
+                                RTE_MBUF_DEFAULT_BUF_SIZE, socket_id);
+    if (!config->rx_pool) {
         rte_exit(EXIT_FAILURE, "Cannot create RX mbuf pool: %s\n",
                  rte_strerror(rte_errno));
     }
 
-    snprintf(name, sizeof(name), "TX%02u:%02u", port, (unsigned)0);
-    struct rte_mempool *tx_mp = rte_pktmbuf_pool_create(
-        name, 2 * GEN_DEFAULT_TX_RING_SIZE, 0, 0, RTE_MBUF_DEFAULT_BUF_SIZE,
-        eth_dev_scoket_id(port));
-    if (tx_mp == NULL) {
+    snprintf(name, sizeof(name), "TX%02u:%02u", config->port_id, (unsigned)0);
+    config->tx_pool =
+        rte_pktmbuf_pool_create(name, 2 * GEN_DEFAULT_TX_RING_SIZE, 0, 0,
+                                RTE_MBUF_DEFAULT_BUF_SIZE, socket_id);
+    if (!config->tx_pool) {
         rte_exit(EXIT_FAILURE, "Cannot create TX mbuf pool: %s\n",
                  rte_strerror(rte_errno));
     }
 
-    struct rte_mbuf *mbuf = rte_pktmbuf_alloc(tx_mp);
+    struct rte_mbuf *mbuf = rte_pktmbuf_alloc(config->tx_pool);
     tx_mbuf_template = *mbuf;
     rte_pktmbuf_free(mbuf);
 
-    if (port >= rte_eth_dev_count()) {
+    if (config->port_id >= rte_eth_dev_count()) {
         return -1;
     }
 
-    if (rte_eth_dev_configure(port, 1, 1, &port_conf) != 0) {
+    if (rte_eth_dev_configure(config->port_id, 1, 1, &port_conf) != 0) {
         rte_exit(EXIT_FAILURE, "Error with port configuration: %s\n",
                  rte_strerror(rte_errno));
     }
 
+    retval = rte_eth_dev_flow_ctrl_get(config->port_id, &fc_conf);
+    if (retval != 0 && retval != -ENOTSUP) {
+        rte_exit(EXIT_FAILURE,
+                 "rte_eth_dev_flow_ctrl_get: "
+                 "err=%d, port=%d, %s",
+                 retval, config->port_id, rte_strerror(-retval));
+    }
+    if (retval == 0) {
+        fc_conf.mode = RTE_FC_NONE;
+
+        retval = rte_eth_dev_flow_ctrl_set(config->port_id, &fc_conf);
+        if (retval < 0 && retval != -ENOTSUP)
+            rte_exit(EXIT_FAILURE,
+                     "rte_eth_dev_flow_ctrl_set: "
+                     "err=%d, port=%d, %s",
+                     retval, config->port_id, rte_strerror(-retval));
+
+        syslog(LOG_INFO, "[port=%d] flow control disabled", config->port_id);
+    }
+
     for (q = 0; q < rx_rings; q++) {
-        retval = rte_eth_rx_queue_setup(port, q, GEN_DEFAULT_RX_RING_SIZE,
-                                        eth_dev_scoket_id(port), NULL, rx_mp);
+        retval =
+            rte_eth_rx_queue_setup(config->port_id, q, GEN_DEFAULT_RX_RING_SIZE,
+                                   socket_id, NULL, config->rx_pool);
         if (retval != 0) {
             return retval;
         }
     }
 
     for (q = 0; q < tx_rings; q++) {
-        retval = rte_eth_tx_queue_setup(port, q, GEN_DEFAULT_TX_RING_SIZE,
-                                        eth_dev_scoket_id(port), NULL);
+        /* FIXME: UDP CHECKSUM OFFLOAD IS DISABLED (performance degradation)
+        struct rte_eth_txconf txconf = {
+            .txq_flags = 0;
+        };
+        */
+        retval = rte_eth_tx_queue_setup(
+            config->port_id, q, GEN_DEFAULT_TX_RING_SIZE, socket_id, NULL);
         if (retval != 0) {
             return retval;
         }
     }
 
-    retval = rte_eth_dev_start(port);
-    if (retval < 0) {
+    retval = rte_eth_dev_start(config->port_id);
+    if (retval != 0) {
         return retval;
     }
 
-    struct ether_addr addr;
-    rte_eth_macaddr_get(port, &addr);
+    struct ether_addr *addr = &config->port_mac;
+    rte_eth_macaddr_get(config->port_id, &config->port_mac);
     syslog(LOG_INFO, "Port %u MAC: %02" PRIx8 " %02" PRIx8 " %02" PRIx8
                      " %02" PRIx8 " %02" PRIx8 " %02" PRIx8 "\n",
-           (unsigned)port, addr.addr_bytes[0], addr.addr_bytes[1],
-           addr.addr_bytes[2], addr.addr_bytes[3], addr.addr_bytes[4],
-           addr.addr_bytes[5]);
+           config->port_id, addr->addr_bytes[0], addr->addr_bytes[1],
+           addr->addr_bytes[2], addr->addr_bytes[3], addr->addr_bytes[4],
+           addr->addr_bytes[5]);
 
-    rte_eth_promiscuous_enable(port);
+    rte_eth_promiscuous_enable(config->port_id);
 
     return 0;
 }
@@ -80,31 +116,9 @@ port_init(uint8_t port, struct pktgen_config *config UNUSED)
 static int
 lcore_init(void *arg)
 {
-    struct pktgen_config *config = (struct pktgen_config *)arg;
-    unsigned port = config->port;
-    char name[7];
-
-    syslog(LOG_INFO, "Init core %d\n", rte_lcore_id());
-
-    config->seed = GEN_DEFAULT_SEED;
-
-    snprintf(name, sizeof(name), "RX%02u:%02u", port, (unsigned)0);
-    config->rx_pool = rte_mempool_lookup(name);
-
-    if (config->rx_pool == NULL) {
-        rte_exit(EXIT_FAILURE, "Cannot create RX mbuf pool: %s\n",
-                 rte_strerror(rte_errno));
-    }
-
-    snprintf(name, sizeof(name), "%s%02u:%02u", "TX", port, (unsigned)0);
-    config->tx_pool = rte_mempool_lookup(name);
-
-    if (config->tx_pool == NULL) {
-        rte_exit(EXIT_FAILURE, "Cannot create TX mbuf pool: %s\n",
-                 rte_strerror(rte_errno));
-    }
-
-    return 0;
+    *(void **)arg =
+        rte_zmalloc("pktgen_config", sizeof(struct pktgen_config), 0);
+    return arg != NULL;
 }
 
 static int
@@ -221,9 +235,7 @@ send_status(int status, char *ip, int ctrl)
     void *buf;
 
     if (sock < 0) {
-        syslog(LOG_ERR,
-               "Failed to connect to the scheduler to send status. %s %s\n", ip,
-               port);
+        syslog(LOG_ERR, "Failed to connect to the scheduler to send status.");
         close(sock);
         return -1;
     }
@@ -251,15 +263,14 @@ send_status(int status, char *ip, int ctrl)
 }
 
 static int
-send_stats(struct pktgen_config *configs, uint16_t n, char *ip, int ctrl)
+send_stats(struct pktgen_config **config, uint16_t n, char *ip, int ctrl)
 {
     char port[32];
     strcpy(port, SCHEDULER_PORT);
     int sock = connect_socket(ip, port);
-    unsigned len, i;
+    unsigned len, i, li;
     int32_t packed_len;
     void *buf;
-    struct ether_addr port_addr;
 
     if (sock < 0) {
         syslog(LOG_ERR, "Failed to connect to the scheduler to send status.\n");
@@ -273,46 +284,58 @@ send_stats(struct pktgen_config *configs, uint16_t n, char *ip, int ctrl)
     s.port = ctrl;
 
     PortStats *p_stats[n];
-    for (i = 0; i < n; i++) {
+    i = 0;
+    for (li = 0; li < rte_lcore_count(); li++) {
         p_stats[i] = malloc(sizeof(PortStats));
         port_stats__init(p_stats[i]);
-        p_stats[i]->n = configs[i].stats.n;
-        p_stats[i]->avg_rxmpps = configs[i].stats.avg_rxpps;
-        p_stats[i]->std_rxmpps = sqrt(configs[i].stats.var_rxpps);
-        p_stats[i]->avg_rxbps = configs[i].stats.avg_rxbps;
-        p_stats[i]->std_rxbps = sqrt(configs[i].stats.var_rxbps);
-        p_stats[i]->avg_txmpps = configs[i].stats.avg_txpps;
-        p_stats[i]->std_txmpps = sqrt(configs[i].stats.var_txpps);
-        p_stats[i]->avg_txbps = configs[i].stats.avg_txbps;
-        p_stats[i]->std_txbps = sqrt(configs[i].stats.var_txbps);
-        p_stats[i]->avg_txwire = configs[i].stats.avg_txwire;
-        p_stats[i]->std_txwire = sqrt(configs[i].stats.var_txwire);
-        p_stats[i]->avg_rxwire = configs[i].stats.avg_rxwire;
-        p_stats[i]->std_rxwire = sqrt(configs[i].stats.var_rxwire);
-        p_stats[i]->n_rtt = configs[i].stats.rtt_n;
-        p_stats[i]->rtt_avg = configs[i].stats.rtt_avg;
-        p_stats[i]->rtt_std = configs[i].stats.rtt_std;
-        p_stats[i]->rtt_0 = configs[i].stats.rtt_0;
-        p_stats[i]->rtt_25 = configs[i].stats.rtt_25;
-        p_stats[i]->rtt_50 = configs[i].stats.rtt_50;
-        p_stats[i]->rtt_75 = configs[i].stats.rtt_75;
-        p_stats[i]->rtt_90 = configs[i].stats.rtt_90;
-        p_stats[i]->rtt_95 = configs[i].stats.rtt_95;
-        p_stats[i]->rtt_99 = configs[i].stats.rtt_99;
-        p_stats[i]->rtt_100 = configs[i].stats.rtt_100;
-        p_stats[i]->tx_bytes = configs[i].stats.tx_bytes;
-        p_stats[i]->tx_pkts = configs[i].stats.tx_pkts;
-        p_stats[i]->rx_bytes = configs[i].stats.rx_bytes;
-        p_stats[i]->rx_pkts = configs[i].stats.rx_pkts;
-
-        if (configs[i].port > n) {
+        if (!config[li] || !config[li]->active)
             continue;
-        }
 
+        p_stats[i]->n = config[li]->stats.n;
+        p_stats[i]->avg_rxmpps = config[li]->stats.avg_rxpps / 1000000;
+        p_stats[i]->std_rxmpps = sqrt(config[li]->stats.var_rxpps) / 1000000;
+        p_stats[i]->avg_rxbps = config[li]->stats.avg_rxbps / 1000000;
+        p_stats[i]->std_rxbps = sqrt(config[li]->stats.var_rxbps) / 1000000;
+        p_stats[i]->avg_txmpps = config[li]->stats.avg_txpps / 1000000;
+        p_stats[i]->std_txmpps = sqrt(config[li]->stats.var_txpps) / 1000000;
+        p_stats[i]->avg_txbps = config[li]->stats.avg_txbps / 1000000;
+        p_stats[i]->std_txbps = sqrt(config[li]->stats.var_txbps) / 1000000;
+        p_stats[i]->avg_txwire = config[li]->stats.avg_txwire / 1000000;
+        p_stats[i]->std_txwire = sqrt(config[li]->stats.var_txwire) / 1000000;
+        p_stats[i]->avg_rxwire = config[li]->stats.avg_rxwire / 1000000;
+        p_stats[i]->std_rxwire = sqrt(config[li]->stats.var_rxwire) / 1000000;
+        p_stats[i]->n_rtt = config[li]->stats.rtt_n;
+        p_stats[i]->rtt_avg = config[li]->stats.rtt_avg;
+        p_stats[i]->rtt_std = config[li]->stats.rtt_std;
+        p_stats[i]->rtt_0 = config[li]->stats.rtt_0;
+        p_stats[i]->rtt_25 = config[li]->stats.rtt_25;
+        p_stats[i]->rtt_50 = config[li]->stats.rtt_50;
+        p_stats[i]->rtt_75 = config[li]->stats.rtt_75;
+        p_stats[i]->rtt_90 = config[li]->stats.rtt_90;
+        p_stats[i]->rtt_95 = config[li]->stats.rtt_95;
+        p_stats[i]->rtt_99 = config[li]->stats.rtt_99;
+        p_stats[i]->rtt_100 = config[li]->stats.rtt_100;
+        p_stats[i]->tx_bytes = config[li]->stats.tx_bytes;
+        p_stats[i]->tx_pkts = config[li]->stats.tx_pkts;
+        p_stats[i]->rx_bytes = config[li]->stats.rx_bytes;
+        p_stats[i]->rx_pkts = config[li]->stats.rx_pkts;
         p_stats[i]->port = (char *)malloc(sizeof(char) * 18);
-        rte_eth_macaddr_get(configs[i].port, &port_addr);
-        ether_format_addr(p_stats[i]->port, 18, &port_addr);
+        ether_format_addr(p_stats[i]->port, 18, &config[li]->port_mac);
+
+        syslog(LOG_INFO,
+               "[port/lcore/socket=%2d;%s,%2d,%1d] rx/tx: mpps=%06.3f/%06.3f "
+               "wire_mbps=%06.1f/%06.1f",
+               config[li]->port_id, p_stats[i]->port, config[li]->lcore_id,
+               config[li]->socket_id, config[li]->stats.avg_rxpps / 1000000,
+               config[li]->stats.avg_txpps / 1000000,
+               config[li]->stats.avg_rxwire / 1000000,
+               config[li]->stats.avg_txwire / 1000000);
+        memset(&config[li]->stats, 0, offsetof(struct rate_stats, flow_ctrs));
+
+        if (++i == n)
+            break;
     }
+
     s.n_stats = n;
     s.stats = p_stats;
 
@@ -340,93 +363,104 @@ send_stats(struct pktgen_config *configs, uint16_t n, char *ip, int ctrl)
 
 static int
 response_handler(int fd UNUSED, char *request, int request_bytes,
-                 struct pktgen_config *cmd, char *ip, int ctrl)
+                 struct pktgen_config **cmd, char *ip, int ctrl)
 {
-    Job *j = job__unpack(NULL, request_bytes, (void *)request);
+    Request *r = request__unpack(NULL, request_bytes, (void *)request);
 
-    if (j == NULL) {
-        syslog(LOG_ERR, "Failed to unpack job.");
+    if (r == NULL) {
+        syslog(LOG_ERR, "Failed to unpack request.");
         return -1;
     }
 
-    cmd->flags &= !FLAG_PRINT;
-    cmd->flags &= !FLAG_WAIT;
-    cmd->port_mac = zero_mac;
-    cmd->src_mac = zero_mac;
-    cmd->dst_mac = zero_mac;
+    Job *j;
+    int i, ret, n_jobs = r->n_jobs;
+    for (i = 0; i < n_jobs; i++) {
+        j = r->jobs[i];
+        cmd[i]->flags &= !FLAG_PRINT;
+        cmd[i]->flags &= !FLAG_WAIT;
+        cmd[i]->port_mac = zero_mac;
+        cmd[i]->src_mac = zero_mac;
+        cmd[i]->dst_mac = zero_mac;
 
-    cmd->tx_rate = j->tx_rate;
-    cmd->warmup = j->warmup;
-    cmd->duration = j->duration;
-    cmd->num_flows = j->num_flows;
-    cmd->size_min = j->size_min;
-    cmd->size_max = j->size_max;
-    cmd->port_min = j->port_min;
-    cmd->port_max = j->port_max;
-    cmd->life_min = j->life_min;
-    cmd->life_max = j->life_max;
+        cmd[i]->tx_rate = j->tx_rate;
+        cmd[i]->warmup = j->warmup;
+        cmd[i]->duration = j->duration;
+        cmd[i]->num_flows = j->num_flows;
+        cmd[i]->size_min = j->size_min;
+        cmd[i]->size_max = j->size_max;
+        cmd[i]->port_min = j->port_min;
+        cmd[i]->port_max = j->port_max;
+        cmd[i]->life_min = j->life_min;
+        cmd[i]->life_max = j->life_max;
 
-    ether_addr_from_str(j->src_mac, &cmd->src_mac);
-    ether_addr_from_str(j->dst_mac, &cmd->dst_mac);
-    ether_addr_from_str(j->port, &cmd->port_mac);
+        ether_addr_from_str(j->src_mac, &cmd[i]->src_mac);
+        ether_addr_from_str(j->dst_mac, &cmd[i]->dst_mac);
+        ether_addr_from_str(j->port, &cmd[i]->port_mac);
 
-    if (j->randomize)
-        cmd->flags |= FLAG_RANDOMIZE_PAYLOAD;
+        if (j->randomize)
+            cmd[i]->flags |= FLAG_RANDOMIZE_PAYLOAD;
 
-    if (j->latency)
-        cmd->flags |= FLAG_MEASURE_LATENCY;
+        if (j->latency)
+            cmd[i]->flags |= FLAG_MEASURE_LATENCY;
 
-    if (j->online)
-        cmd->flags |= FLAG_GENERATE_ONLINE;
+        if (j->online)
+            cmd[i]->flags |= FLAG_GENERATE_ONLINE;
 
-    if (j->stop)
-        cmd->flags |= FLAG_WAIT;
+        if (j->stop)
+            cmd[i]->flags |= FLAG_WAIT;
 
-    if (j->print)
-        cmd->flags |= (FLAG_PRINT | FLAG_WAIT);
+        if (j->print)
+            cmd[i]->flags |= (FLAG_PRINT | FLAG_WAIT);
 
-    if (j->tcp)
-        cmd->proto = 6;
-    else
-        cmd->proto = 17;
+        if (j->tcp)
+            cmd[i]->proto = IPPROTO_TCP;
+        else
+            cmd[i]->proto = IPPROTO_UDP;
 
-    if (cmd->life_min >= 0)
-        cmd->flags |= FLAG_LIMIT_FLOW_LIFE;
+        if (cmd[i]->life_min >= 0)
+            cmd[i]->flags |= FLAG_LIMIT_FLOW_LIFE;
 
 #if GEN_DEBUG
-    printf(
-        "Starting traffic: {\n"
-        "\ttx_rate: %u\n"
-        "\twarmup: %u\n"
-        "\tduration: %u\n"
-        "\tnum_flows: %u\n"
-        "\tsize_min: %u\n"
-        "\tsize_max: %u\n"
-        "\tproto: %u\n"
-        "\tport_min: %u\n"
-        "\tport_max: %u\n"
-        "\tlife_min: %f\n"
-        "\tlife_max: %f\n"
-        "\tdst_mac: %s\n"
-        "\tport: %s\n"
-        "\tlimit flow life: %d\n"
-        "\trandomize: %d\n"
-        "\tlatency: %d\n"
-        "\tonline: %d\n"
-        "\tstop: %d\n"
-        "\tprint: %d\n}\n",
-        cmd->tx_rate, cmd->warmup, cmd->duration, cmd->num_flows, cmd->size_min,
-        cmd->size_max, cmd->proto, cmd->port_min, cmd->port_max, cmd->life_min,
-        cmd->life_max, j->dst_mac, j->port, cmd->flags & FLAG_LIMIT_FLOW_LIFE,
-        cmd->flags & FLAG_RANDOMIZE_PAYLOAD, cmd->flags & FLAG_MEASURE_LATENCY,
-        cmd->flags & FLAG_GENERATE_ONLINE, cmd->flags & FLAG_WAIT,
-        cmd->flags & FLAG_PRINT);
+        syslog(LOG_ERR,
+               "request: {"
+               "tx_rate: %u"
+               ", warmup: %u"
+               ", duration: %u"
+               ", num_flows: %u"
+               ", size_min: %u"
+               ", size_max: %u"
+               ", proto: %u"
+               ", port_min: %u"
+               ", port_max: %u"
+               ", life_min: %f"
+               ", life_max: %f"
+               ", dst_mac: %s"
+               ", port_id: %s"
+               ", limit flow life: %d"
+               ", randomize: %d"
+               ", latency: %d"
+               ", online: %d"
+               ", stop: %d"
+               ", print: %d}",
+               cmd[i]->tx_rate, cmd[i]->warmup, cmd[i]->duration,
+               cmd[i]->num_flows, cmd[i]->size_min, cmd[i]->size_max,
+               cmd[i]->proto, cmd[i]->port_min, cmd[i]->port_max,
+               cmd[i]->life_min, cmd[i]->life_max, j->dst_mac, j->port,
+               (cmd[i]->flags & FLAG_LIMIT_FLOW_LIFE) != 0,
+               (cmd[i]->flags & FLAG_RANDOMIZE_PAYLOAD) != 0,
+               (cmd[i]->flags & FLAG_MEASURE_LATENCY) != 0,
+               (cmd[i]->flags & FLAG_GENERATE_ONLINE) != 0,
+               (cmd[i]->flags & FLAG_WAIT) != 0,
+               (cmd[i]->flags & FLAG_PRINT) != 0);
 #endif
-    job__free_unpacked(j, NULL);
-    if (!(cmd->flags & FLAG_PRINT))
-        return send_status(STATUS__TYPE__SUCCESS, ip, ctrl);
-    else
-        return 0;
+    }
+    request__free_unpacked(r, NULL);
+    ret = send_status(STATUS__TYPE__SUCCESS, ip, ctrl);
+
+    if (ret < 0) {
+        return ret;
+    }
+    return n_jobs;
 }
 
 int
@@ -436,9 +470,12 @@ main(int argc, char *argv[])
     setup_daemon();
 #endif
 
-    int i;
-    uint8_t nb_ports, port, nb_cores, core;
-    struct pktgen_config cmd;
+    int i, j, li;  // li = lcore_index
+    uint8_t nb_ports, port_id, nb_cores;
+    struct pktgen_config *cmd[MAX_CMD];
+    for (i = 0; i < MAX_CMD; i++) {
+        cmd[i] = malloc(sizeof(struct pktgen_config));
+    }
 
     int ret = rte_eal_init(argc, argv);
     if (ret < 0) {
@@ -454,14 +491,37 @@ main(int argc, char *argv[])
 
     nb_ports = rte_eth_dev_count();
     nb_cores = rte_lcore_count();
-    uint8_t port_map[nb_cores];
 
-    core = 0;
-    for (port = 0; port < nb_ports; port++) {
-        if (port_init(port, NULL) != 0) {
-            rte_exit(EXIT_FAILURE, "Cannot init port %" PRIu8 "\n", port);
+    struct pktgen_config *
+        config[nb_cores];  // = malloc(nb_cores * sizeof(struct pktgen_config));
+
+    for (li = 0; li < nb_cores; li++) config[li] = NULL;
+
+    RTE_LCORE_FOREACH_SLAVE(i)
+    {
+        li = rte_lcore_index(i);
+        rte_eal_remote_launch(lcore_init, (void *)&config[li], i);
+        rte_eal_wait_lcore(i);
+        config[li]->active = 0;
+    }
+
+    for (port_id = 0; port_id < nb_ports; port_id++) {
+        uint8_t socket_id = rte_eth_dev_socket_id(port_id);
+        assert(socket_id == 0 || socket_id == 1);
+
+        RTE_LCORE_FOREACH_SLAVE(i)
+        {
+            li = rte_lcore_index(i);
+            if (config[li]->active || rte_lcore_to_socket_id(i) != socket_id)
+                continue;
+            config[li]->active = 1;
+            config[li]->port_id = port_id;
+            config[li]->lcore_id = i;
+            if (port_init(config[li]) != 0)
+                rte_exit(EXIT_FAILURE, "Cannot init port %" PRIu8 "\n",
+                         port_id);
+            break;
         }
-        port_map[core++] = port;
     }
 
     int fd_server = create_and_bind_socket(argv[1]);
@@ -474,119 +534,131 @@ main(int argc, char *argv[])
         rte_exit(EXIT_FAILURE, "Failed to listen to socket.");
     }
 
-    struct pktgen_config config[nb_cores];
-
-    core = 0;
-    port = 0;
     RTE_LCORE_FOREACH_SLAVE(i)
     {
-        memset(&config[core], 0, sizeof(struct pktgen_config));
-        if (port >= nb_ports) {
-            config[core].port = 0xff;
-            goto init_done;
+        li = rte_lcore_index(i);
+        if (!config[li]->active) {
+            continue;
         }
-        config[core].flags = FLAG_WAIT;
-        config[core].port = port_map[core];
-        rte_eth_macaddr_get(port_map[core], &config[core].port_mac);
-        sem_init(&config[core].stop_sempahore, 0, 0);
-        rte_eal_remote_launch(lcore_init, (void *)&config[core], i);
-        rte_eal_wait_lcore(i);
-        rte_eal_remote_launch(launch_worker, (void *)&config[core], i);
-    init_done:
-        core++;
-        port++;
+        config[li]->flags = FLAG_WAIT;
+        sem_init(&config[li]->stop_sempahore, 0, 0);
+        rte_eal_remote_launch(launch_worker, (void *)config[li], i);
     }
 
     signal(SIGINT, sig_handler);
 
-    cmd.port_min = 0;
-    cmd.port_max = 0;
-    cmd.proto = 17;
-    cmd.size_min = 0;
-    cmd.size_max = 0;
-    cmd.life_min = 0;
-    cmd.life_max = 2;
-    cmd.num_flows = 0;
-    cmd.warmup = 0;
-    cmd.duration = 0;
-    cmd.tx_rate = 0;
-    cmd.flags = 0;
-    cmd.src_mac = zero_mac;
-    cmd.dst_mac = zero_mac;
-    cmd.port_mac = zero_mac;
-    cmd.rx_ring_size = GEN_DEFAULT_RX_RING_SIZE;
-    cmd.tx_ring_size = GEN_DEFAULT_TX_RING_SIZE;
-
-    int request_bytes;
+    int request_bytes, n_jobs;
     char request[8192], *client_ip;
-    struct sockaddr_storage addr_client;
+    struct sockaddr_storage addr_storage;
+    struct sockaddr_in *addr_in = (struct sockaddr_in *)&addr_storage;
+    struct sockaddr *addr = (struct sockaddr *)&addr_storage;
+    socklen_t sin_size = sizeof addr_storage;
+
+    for (i = 0; i < MAX_CMD; i++) {
+        cmd[i]->port_min = 0;
+        cmd[i]->port_max = 0;
+        cmd[i]->proto = IPPROTO_UDP;
+        cmd[i]->size_min = 0;
+        cmd[i]->size_max = 0;
+        cmd[i]->life_min = 0;
+        cmd[i]->life_max = 2;
+        cmd[i]->num_flows = 0;
+        cmd[i]->warmup = 0;
+        cmd[i]->duration = 0;
+        cmd[i]->tx_rate = 0;
+        cmd[i]->flags = 0;
+        cmd[i]->src_mac = zero_mac;
+        cmd[i]->dst_mac = zero_mac;
+        cmd[i]->port_mac = zero_mac;
+        cmd[i]->rx_ring_size = GEN_DEFAULT_RX_RING_SIZE;
+        cmd[i]->tx_ring_size = GEN_DEFAULT_TX_RING_SIZE;
+    }
 
     for (;;) {
-        socklen_t sin_size = sizeof addr_client;
-        int fd_client =
-            accept(fd_server, (struct sockaddr *)&addr_client, &sin_size);
-        if (fd_client >= 0) {
-            struct sockaddr_in *caddr = (struct sockaddr_in *)&addr_client;
-            client_ip = inet_ntoa(caddr->sin_addr);
-            if ((request_bytes = request_handler(fd_client, request)) > 0) {
-                if (response_handler(fd_client, request, request_bytes, &cmd,
-                                     client_ip, control_port) == -1) {
-                    syslog(LOG_ERR,
-                           "Failed to respond to request from scheduler.");
-                }
+        int fd_client = accept(fd_server, addr, &sin_size);
+        if (fd_client < 0)
+            continue;
 
-                /* Launch generator */
-                core = 0;
-                port = 0;
+        if ((request_bytes = request_handler(fd_client, request)) <= 0) {
+            syslog(LOG_ERR, "Failed to process request from scheduler.");
+            close(fd_client);
+            continue;
+        }
+
+        client_ip = inet_ntoa(addr_in->sin_addr);
+        if ((n_jobs = response_handler(fd_client, request, request_bytes, cmd,
+                                       client_ip, control_port)) == -1) {
+            syslog(LOG_ERR, "Failed to respond to request from scheduler.");
+        }
+
+        for (j = 0; j < n_jobs; j++) {
+            // broadcast command
+            if (is_zero_ether_addr(&cmd[j]->port_mac) &&
+                cmd[j]->flags & FLAG_PRINT) {
+                // FIXME: using the main config instead of copying it over first
+                // struct pktgen_config sconfig[nb_ports];
                 RTE_LCORE_FOREACH_SLAVE(i)
                 {
-                    unsigned old_flags = 0;
-                    if (port == nb_ports) {
-                        break;
-                    }
-
-                    if (!is_zero_ether_addr(&cmd.port_mac) &&
-                        !is_same_ether_addr(&cmd.port_mac,
-                                            &config[core].port_mac)) {
-                        goto launch_done;
-                    }
-                    config[core].tx_rate = cmd.tx_rate;
-                    config[core].warmup = cmd.warmup;
-                    config[core].duration = cmd.duration;
-                    config[core].num_flows = cmd.num_flows;
-                    config[core].ip_min = 0xAFCD0123;
-                    config[core].port_min = cmd.port_min;
-                    config[core].port_max = cmd.port_max;
-                    config[core].proto = cmd.proto;
-                    config[core].size_min = cmd.size_min;
-                    config[core].size_max = cmd.size_max;
-                    config[core].life_min = cmd.life_min;
-                    config[core].life_max = cmd.life_max;
-                    config[core].port = port_map[core];
-                    config[core].rx_ring_size = cmd.rx_ring_size;
-                    config[core].tx_ring_size = cmd.tx_ring_size;
-                    old_flags = __sync_lock_test_and_set(&config[core].flags,
-                                                         cmd.flags);
-                    // Previously we were waiting, but aren't anymore.
-                    if (!(old_flags & FLAG_WAIT) && (cmd.flags & FLAG_WAIT)) {
-                        sem_wait(&config[core].stop_sempahore);
-                    }
-                    ether_addr_copy(&cmd.dst_mac, &config[core].dst_mac);
-                launch_done:
-                    core++;
-                    port++;
+                    li = rte_lcore_index(i);
+                    if (!config[li]->active)
+                        continue;
+                    // sconfig[config[li]->port] = config[li];
                 }
-
-                if (cmd.flags & FLAG_PRINT &&
-                    send_stats(config, nb_ports, client_ip, control_port) ==
-                        -1) {
+                if (send_stats(config, nb_ports, client_ip, control_port) ==
+                    -1) {
                     syslog(LOG_ERR, "Failed to send stats to scheduler.");
                 }
-            } else {
-                syslog(LOG_ERR, "Failed to process request from scheduler.");
+                continue;
             }
-            close(fd_client);
+
+            // unicast command
+            RTE_LCORE_FOREACH_SLAVE(i)
+            {
+                li = rte_lcore_index(i);
+                if (!config[li]->active ||
+                    (!is_same_ether_addr(&cmd[j]->port_mac,
+                                         &config[li]->port_mac) &&
+                     !is_zero_ether_addr(&cmd[j]->port_mac)))
+                    continue;
+
+                if (cmd[j]->flags & FLAG_PRINT) {
+                    if (send_stats(&config[li], 1, client_ip, control_port) ==
+                        -1) {
+                        syslog(LOG_ERR, "Failed to send stats to scheduler.");
+                    }
+                }
+
+                unsigned old_flags = 0;
+                config[li]->tx_rate = cmd[j]->tx_rate;
+                config[li]->warmup = cmd[j]->warmup;
+                config[li]->duration = cmd[j]->duration;
+                config[li]->num_flows = cmd[j]->num_flows;
+                config[li]->ip_min = 0xAFCD0123;
+                config[li]->port_min = cmd[j]->port_min;
+                config[li]->port_max = cmd[j]->port_max;
+                config[li]->proto = cmd[j]->proto;
+                config[li]->size_min = cmd[j]->size_min;
+                config[li]->size_max = cmd[j]->size_max;
+                config[li]->life_min = cmd[j]->life_min;
+                config[li]->life_max = cmd[j]->life_max;
+                config[li]->rx_ring_size = cmd[j]->rx_ring_size;
+                config[li]->tx_ring_size = cmd[j]->tx_ring_size;
+                ether_addr_copy(&cmd[j]->dst_mac, &config[li]->dst_mac);
+                old_flags =
+                    __sync_lock_test_and_set(&config[li]->flags, cmd[j]->flags);
+                // Previously we were waiting, but aren't anymore.
+                if (!(old_flags & FLAG_WAIT) && (cmd[j]->flags & FLAG_WAIT)) {
+                    sem_wait(&config[li]->stop_sempahore);
+                }
+            }
         }
+    }
+
+    free(cmd);
+    RTE_LCORE_FOREACH_SLAVE(i)
+    {
+        li = rte_lcore_index(i);
+        rte_free(config[li]);
     }
     return 0;
 }
