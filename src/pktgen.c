@@ -486,7 +486,7 @@ main(int argc, char *argv[])
     argv += ret;
 
     if (argc < 1) {
-        rte_exit(EXIT_FAILURE, "Args: LISTEN_PORT");
+        rte_exit(EXIT_FAILURE, "Args: LISTEN_PORT [CORE_TO_PORT_MAPPING]\n");
     }
 
     nb_ports = rte_eth_dev_count();
@@ -494,6 +494,7 @@ main(int argc, char *argv[])
 
     struct pktgen_config *
         config[nb_cores];  // = malloc(nb_cores * sizeof(struct pktgen_config));
+    int port_active[nb_ports] = {0};
 
     for (li = 0; li < nb_cores; li++) config[li] = NULL;
 
@@ -503,24 +504,79 @@ main(int argc, char *argv[])
         rte_eal_remote_launch(lcore_init, (void *)&config[li], i);
         rte_eal_wait_lcore(i);
         config[li]->active = 0;
+        config[li]->lcore_id = i;
     }
 
-    for (port_id = 0; port_id < nb_ports; port_id++) {
-        uint8_t socket_id = rte_eth_dev_socket_id(port_id);
-        assert(socket_id == 0 || socket_id == 1);
+    if (argc > 2) {
+        /* Using cmd line core->port mapping */
+        for (i = 2; i < argc; i++) {
+            if (sscanf(argv[i], "%" SCNu8 ".%" SCNu8, &li, &port_id) == EOF) {
+                rte_exit("Invalid core-port mapping.\n");
+            }
+            if (li >= nb_cores) {
+                rte_exit(EXIT_FAILURE, "Core %" PRIu8 " doesn't exist.\n", li);
+            }
+            if (port_id >= nb_ports) {
+                rte_exit(EXIT_FAILURE, "Port %" PRIu8 " doesn't exist.\n",
+                         port_id);
+            }
 
-        RTE_LCORE_FOREACH_SLAVE(i)
-        {
-            li = rte_lcore_index(i);
-            if (config[li]->active || rte_lcore_to_socket_id(i) != socket_id)
-                continue;
+            if (port_active[port_id]) {
+                rte_exit(EXIT_FAILURE,
+                         "Core for port %" PRIu8 " was already set.\n",
+                         port_id);
+            } else if (config[li]->active) {
+                rte_exit(EXIT_FAILURE, "Core %" PRIu8 " was already set.\n",
+                         li);
+            }
+
             config[li]->active = 1;
             config[li]->port_id = port_id;
-            config[li]->lcore_id = i;
             if (port_init(config[li]) != 0)
                 rte_exit(EXIT_FAILURE, "Cannot init port %" PRIu8 "\n",
                          port_id);
-            break;
+            syslog(LOG_INFO, "core: %" PRIu8 " port: %" PRIu8 "\n", li,
+                   port_id);
+        }
+    } else {
+        /* Fall back on numa-aware mapping */
+        for (port_id = 0; port_id < nb_ports; port_id++) {
+            uint8_t socket_id = rte_eth_dev_socket_id(port_id);
+            assert(socket_id == 0 || socket_id == 1);
+
+            RTE_LCORE_FOREACH_SLAVE(i)
+            {
+                li = rte_lcore_index(i);
+                if (config[li]->active ||
+                    rte_lcore_to_socket_id(i) != socket_id)
+                    continue;
+                config[li]->active = 1;
+                config[li]->port_id = port_id;
+                port_active[port_id] = 1;
+                if (port_init(config[li]) != 0)
+                    rte_exit(EXIT_FAILURE, "Cannot init port %" PRIu8 "\n",
+                             port_id);
+                break;
+            }
+        }
+
+        /* Assign remaining ports to whatever spare cores there are*/
+        for (port_id = 0; port_id < nb_ports; port_id++) {
+            if (port_active[port_id])
+                continue;
+
+            RTE_LCORE_FOREACH_SLAVE(i)
+            {
+                li = rte_lcore_index(i);
+                if (config[li]->active)
+                    continue;
+                config[li]->active = 1;
+                config[li]->port_id = port_id;
+                if (port_init(config[li]) != 0)
+                    rte_exit(EXIT_FAILURE, "Cannot init port %" PRIu8 "\n",
+                             port_id);
+                break;
+            }
         }
     }
 
