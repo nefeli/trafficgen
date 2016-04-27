@@ -704,6 +704,7 @@ main(int argc, char *argv[])
                 config[li]->life_max = cmd[j]->life_max;
                 config[li]->rx_ring_size = cmd[j]->rx_ring_size;
                 config[li]->tx_ring_size = cmd[j]->tx_ring_size;
+                ether_addr_copy(&cmd[j]->src_mac, &config[li]->src_mac);
                 ether_addr_copy(&cmd[j]->dst_mac, &config[li]->dst_mac);
                 old_flags =
                     __sync_lock_test_and_set(&config[li]->flags, cmd[j]->flags);
