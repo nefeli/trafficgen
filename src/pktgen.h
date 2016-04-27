@@ -79,6 +79,7 @@
 #define FLAG_PRINT 1 << 6
 
 #define NUM_SAMPLES 100000
+#define NUM_ETH_SPEEDS 12
 
 struct rate_stats {
     uint64_t n;
@@ -127,10 +128,11 @@ struct pktgen_config {
     uint8_t lcore_id;
     uint8_t socket_id;
     uint8_t port_id;
+    uint32_t port_speed;
 
     uint8_t role;
 
-    uint32_t tx_rate;
+    int tx_rate;
     uint32_t warmup;
     uint32_t duration;
 

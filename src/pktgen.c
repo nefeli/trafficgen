@@ -100,6 +100,10 @@ port_init(struct pktgen_config *config)
         return retval;
     }
 
+    struct rte_eth_link link;
+    rte_eth_link_get(config->port_id, &link);
+    config->port_speed = link.link_speed;
+
     struct ether_addr *addr = &config->port_mac;
     rte_eth_macaddr_get(config->port_id, &config->port_mac);
     syslog(LOG_INFO, "Port %u MAC: %02" PRIx8 " %02" PRIx8 " %02" PRIx8
@@ -494,8 +498,9 @@ main(int argc, char *argv[])
 
     struct pktgen_config *
         config[nb_cores];  // = malloc(nb_cores * sizeof(struct pktgen_config));
-    int port_active[nb_ports] = {0};
+    int port_active[nb_ports];
 
+    for (port_id = 0; port_id < nb_ports; port_id++) port_active[port_id] = 0;
     for (li = 0; li < nb_cores; li++) config[li] = NULL;
 
     RTE_LCORE_FOREACH_SLAVE(i)
@@ -510,8 +515,9 @@ main(int argc, char *argv[])
     if (argc > 2) {
         /* Using cmd line core->port mapping */
         for (i = 2; i < argc; i++) {
-            if (sscanf(argv[i], "%" SCNu8 ".%" SCNu8, &li, &port_id) == EOF) {
-                rte_exit("Invalid core-port mapping.\n");
+            if (sscanf(argv[i], "%" SCNu8 ".%" SCNu8, (uint8_t *)&li,
+                       &port_id) == EOF) {
+                rte_exit(EXIT_FAILURE, "Invalid core-port mapping.");
             }
             if (li >= nb_cores) {
                 rte_exit(EXIT_FAILURE, "Core %" PRIu8 " doesn't exist.\n", li);
