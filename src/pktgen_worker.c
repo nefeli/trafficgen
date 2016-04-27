@@ -123,10 +123,9 @@ update_stats(struct pktgen_config *config UNUSED, struct rate_stats *s,
     s->tx_pkts = 0;
 
 #if GEN_DEBUG
-    syslog(LOG_INFO,
-           "[lcore=%d] rx/tx stats: mpps=%0.3f/%0.3f wire_mbps=%0.1f/%0.1f",
-           config->lcore_id, rx_pps / 1000000, tx_pps / 1000000,
-           rxwire / 1000000, txwire / 1000000);
+    log_info("[lcore=%d] rx/tx stats: mpps=%0.3f/%0.3f wire_mbps=%0.1f/%0.1f",
+             config->lcore_id, rx_pps / 1000000, tx_pps / 1000000,
+             rxwire / 1000000, txwire / 1000000);
 #endif
 }
 
@@ -394,7 +393,7 @@ worker_loop(struct pktgen_config *config)
                             0.5 *
                                 (r_stats->avg_txbps / r_stats->avg_rxbps - 1));
                     config->tx_rate = factor * r_stats->avg_rxbps / 1000000;
-                    syslog(LOG_INFO, "adjusting txrate %d", config->tx_rate);
+                    log_info("adjusting txrate %d", config->tx_rate);
                     reset_stats(config, r_stats);
                 }
 

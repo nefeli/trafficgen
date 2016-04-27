@@ -18,12 +18,14 @@ CFLAGS += -std=gnu99 -g3 -ggdb3 -Ofast -m64 -march=native \
 		  -Wall -Werror -Wno-unused-function -Wno-unused-but-set-variable \
 		  -I${DPDK_INC_DIR} -D_GNU_SOURCE
 
+HDRS = src/pktgen.h src/pktgen_util.h src/pktgen_config.h
+
 SRCS = src/pktgen.c src/pktgen_worker.c src/protobufs/job.pb-c.c \
 	   src/protobufs/status.pb-c.c
 
 .PHONY: format dpdk
 
-bin/pktgen: ${SRCS}
+bin/pktgen: ${HDRS} ${SRCS}
 	mkdir -p bin
 	${CC} ${CFLAGS} ${LDFLAGS} -o $@ ${SRCS} ${LIBS}
 
@@ -33,7 +35,8 @@ clean:
 	rm -rf dpdk-2.2.0
 
 format: src/pktgen.h src/pktgen.c src/pktgen_worker.c src/pktgen_util.h \
-	src/protobufs/job.pb-c.c src/protobufs/status.pb-c.c src/simd.h
+	src/pktgen_config.h src/protobufs/job.pb-c.c src/protobufs/status.pb-c.c \
+	src/simd.h
 	clang-format -i $^
 
 dpdk-2.2.0.tar.gz:

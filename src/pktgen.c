@@ -70,7 +70,7 @@ port_init(struct pktgen_config *config)
                      "err=%d, port=%d, %s",
                      retval, config->port_id, rte_strerror(-retval));
 
-        syslog(LOG_INFO, "[port=%d] flow control disabled", config->port_id);
+        log_info("[port=%d] flow control disabled", config->port_id);
     }
 
     for (q = 0; q < rx_rings; q++) {
@@ -106,11 +106,11 @@ port_init(struct pktgen_config *config)
 
     struct ether_addr *addr = &config->port_mac;
     rte_eth_macaddr_get(config->port_id, &config->port_mac);
-    syslog(LOG_INFO, "Port %u MAC: %02" PRIx8 " %02" PRIx8 " %02" PRIx8
-                     " %02" PRIx8 " %02" PRIx8 " %02" PRIx8 "\n",
-           config->port_id, addr->addr_bytes[0], addr->addr_bytes[1],
-           addr->addr_bytes[2], addr->addr_bytes[3], addr->addr_bytes[4],
-           addr->addr_bytes[5]);
+    log_info("Port %u MAC: %02" PRIx8 " %02" PRIx8 " %02" PRIx8 " %02" PRIx8
+             " %02" PRIx8 " %02" PRIx8 "\n",
+             config->port_id, addr->addr_bytes[0], addr->addr_bytes[1],
+             addr->addr_bytes[2], addr->addr_bytes[3], addr->addr_bytes[4],
+             addr->addr_bytes[5]);
 
     rte_eth_promiscuous_enable(config->port_id);
 
@@ -215,14 +215,14 @@ request_handler(int fd_client, char *request)
     char len_buf[4];
 
     if (read_n_bytes(fd_client, 4, len_buf) < 0) {
-        syslog(LOG_ERR, "Failed to read length of status.");
+        log_err("Failed to read length of status.");
     }
 
     int32_t *x = (int32_t *)&len_buf;
     req_len = ntohl(*x);
 
     if (read_n_bytes(fd_client, req_len, request) < 0) {
-        syslog(LOG_ERR, "Failed to read status.");
+        log_err("Failed to read status.");
     }
 
     return req_len;
@@ -239,7 +239,7 @@ send_status(int status, char *ip, int ctrl)
     void *buf;
 
     if (sock < 0) {
-        syslog(LOG_ERR, "Failed to connect to the scheduler to send status.");
+        log_err("Failed to connect to the scheduler to send status.");
         close(sock);
         return -1;
     }
@@ -257,7 +257,7 @@ send_status(int status, char *ip, int ctrl)
     status__pack(&s, (void *)((uint8_t *)(buf) + 4));
 
     if (send(sock, buf, len + 4, 0) < 0) {
-        syslog(LOG_ERR, "Failed to send status to the scheduler.");
+        log_err("Failed to send status to the scheduler.");
         close(sock);
         return -1;
     }
@@ -277,7 +277,7 @@ send_stats(struct pktgen_config **config, uint16_t n, char *ip, int ctrl)
     void *buf;
 
     if (sock < 0) {
-        syslog(LOG_ERR, "Failed to connect to the scheduler to send status.\n");
+        log_err("Failed to connect to the scheduler to send status.\n");
         close(sock);
         return -1;
     }
@@ -326,14 +326,14 @@ send_stats(struct pktgen_config **config, uint16_t n, char *ip, int ctrl)
         p_stats[i]->port = (char *)malloc(sizeof(char) * 18);
         ether_format_addr(p_stats[i]->port, 18, &config[li]->port_mac);
 
-        syslog(LOG_INFO,
-               "[port/lcore/socket=%2d;%s,%2d,%1d] rx/tx: mpps=%06.3f/%06.3f "
-               "wire_mbps=%06.1f/%06.1f",
-               config[li]->port_id, p_stats[i]->port, config[li]->lcore_id,
-               config[li]->socket_id, config[li]->stats.avg_rxpps / 1000000,
-               config[li]->stats.avg_txpps / 1000000,
-               config[li]->stats.avg_rxwire / 1000000,
-               config[li]->stats.avg_txwire / 1000000);
+        log_info(
+            "[port/lcore/socket=%2d;%s,%2d,%1d] rx/tx: mpps=%06.3f/%06.3f "
+            "wire_mbps=%06.1f/%06.1f",
+            config[li]->port_id, p_stats[i]->port, config[li]->lcore_id,
+            config[li]->socket_id, config[li]->stats.avg_rxpps / 1000000,
+            config[li]->stats.avg_txpps / 1000000,
+            config[li]->stats.avg_rxwire / 1000000,
+            config[li]->stats.avg_txwire / 1000000);
         memset(&config[li]->stats, 0, offsetof(struct rate_stats, flow_ctrs));
 
         if (++i == n)
@@ -356,7 +356,7 @@ send_stats(struct pktgen_config **config, uint16_t n, char *ip, int ctrl)
     }
 
     if (send(sock, buf, len + 4, 0) < 0) {
-        syslog(LOG_ERR, "Failed to send stats to the scheduler.");
+        log_err("Failed to send stats to the scheduler.");
         close(sock);
         return -1;
     }
@@ -372,7 +372,7 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
     Request *r = request__unpack(NULL, request_bytes, (void *)request);
 
     if (r == NULL) {
-        syslog(LOG_ERR, "Failed to unpack request.");
+        log_err("Failed to unpack request.");
         return -1;
     }
 
@@ -425,37 +425,37 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
             cmd[i]->flags |= FLAG_LIMIT_FLOW_LIFE;
 
 #if GEN_DEBUG
-        syslog(LOG_ERR,
-               "request: {"
-               "tx_rate: %u"
-               ", warmup: %u"
-               ", duration: %u"
-               ", num_flows: %u"
-               ", size_min: %u"
-               ", size_max: %u"
-               ", proto: %u"
-               ", port_min: %u"
-               ", port_max: %u"
-               ", life_min: %f"
-               ", life_max: %f"
-               ", dst_mac: %s"
-               ", port_id: %s"
-               ", limit flow life: %d"
-               ", randomize: %d"
-               ", latency: %d"
-               ", online: %d"
-               ", stop: %d"
-               ", print: %d}",
-               cmd[i]->tx_rate, cmd[i]->warmup, cmd[i]->duration,
-               cmd[i]->num_flows, cmd[i]->size_min, cmd[i]->size_max,
-               cmd[i]->proto, cmd[i]->port_min, cmd[i]->port_max,
-               cmd[i]->life_min, cmd[i]->life_max, j->dst_mac, j->port,
-               (cmd[i]->flags & FLAG_LIMIT_FLOW_LIFE) != 0,
-               (cmd[i]->flags & FLAG_RANDOMIZE_PAYLOAD) != 0,
-               (cmd[i]->flags & FLAG_MEASURE_LATENCY) != 0,
-               (cmd[i]->flags & FLAG_GENERATE_ONLINE) != 0,
-               (cmd[i]->flags & FLAG_WAIT) != 0,
-               (cmd[i]->flags & FLAG_PRINT) != 0);
+        log_err(
+            "request: {"
+            "tx_rate: %u"
+            ", warmup: %u"
+            ", duration: %u"
+            ", num_flows: %u"
+            ", size_min: %u"
+            ", size_max: %u"
+            ", proto: %u"
+            ", port_min: %u"
+            ", port_max: %u"
+            ", life_min: %f"
+            ", life_max: %f"
+            ", dst_mac: %s"
+            ", port_id: %s"
+            ", limit flow life: %d"
+            ", randomize: %d"
+            ", latency: %d"
+            ", online: %d"
+            ", stop: %d"
+            ", print: %d}",
+            cmd[i]->tx_rate, cmd[i]->warmup, cmd[i]->duration,
+            cmd[i]->num_flows, cmd[i]->size_min, cmd[i]->size_max,
+            cmd[i]->proto, cmd[i]->port_min, cmd[i]->port_max, cmd[i]->life_min,
+            cmd[i]->life_max, j->dst_mac, j->port,
+            (cmd[i]->flags & FLAG_LIMIT_FLOW_LIFE) != 0,
+            (cmd[i]->flags & FLAG_RANDOMIZE_PAYLOAD) != 0,
+            (cmd[i]->flags & FLAG_MEASURE_LATENCY) != 0,
+            (cmd[i]->flags & FLAG_GENERATE_ONLINE) != 0,
+            (cmd[i]->flags & FLAG_WAIT) != 0,
+            (cmd[i]->flags & FLAG_PRINT) != 0);
 #endif
     }
     request__free_unpacked(r, NULL);
@@ -541,8 +541,7 @@ main(int argc, char *argv[])
             if (port_init(config[li]) != 0)
                 rte_exit(EXIT_FAILURE, "Cannot init port %" PRIu8 "\n",
                          port_id);
-            syslog(LOG_INFO, "core: %" PRIu8 " port: %" PRIu8 "\n", li,
-                   port_id);
+            log_info("core: %" PRIu8 " port: %" PRIu8 "\n", li, port_id);
         }
     } else {
         /* Fall back on numa-aware mapping */
@@ -642,7 +641,7 @@ main(int argc, char *argv[])
             continue;
 
         if ((request_bytes = request_handler(fd_client, request)) <= 0) {
-            syslog(LOG_ERR, "Failed to process request from scheduler.");
+            log_err("Failed to process request from scheduler.");
             close(fd_client);
             continue;
         }
@@ -650,7 +649,7 @@ main(int argc, char *argv[])
         client_ip = inet_ntoa(addr_in->sin_addr);
         if ((n_jobs = response_handler(fd_client, request, request_bytes, cmd,
                                        client_ip, control_port)) == -1) {
-            syslog(LOG_ERR, "Failed to respond to request from scheduler.");
+            log_err("Failed to respond to request from scheduler.");
         }
 
         for (j = 0; j < n_jobs; j++) {
@@ -668,7 +667,7 @@ main(int argc, char *argv[])
                 }
                 if (send_stats(config, nb_ports, client_ip, control_port) ==
                     -1) {
-                    syslog(LOG_ERR, "Failed to send stats to scheduler.");
+                    log_err("Failed to send stats to scheduler.");
                 }
                 continue;
             }
@@ -686,7 +685,7 @@ main(int argc, char *argv[])
                 if (cmd[j]->flags & FLAG_PRINT) {
                     if (send_stats(&config[li], 1, client_ip, control_port) ==
                         -1) {
-                        syslog(LOG_ERR, "Failed to send stats to scheduler.");
+                        log_err("Failed to send stats to scheduler.");
                     }
                 }
 

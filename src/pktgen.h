@@ -1,6 +1,7 @@
 #ifndef PKTGEN_H
 #define PKTGEN_H 1
 
+#include "pktgen_config.h"
 #include "pktgen_util.h"
 
 #include <stdlib.h>
@@ -14,7 +15,6 @@
 #include <signal.h>
 #include <semaphore.h>
 
-/* start demo stuff */
 #include <errno.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -28,13 +28,6 @@
 
 #include "protobufs/job.pb-c.h"
 #include "protobufs/status.pb-c.h"
-
-#define PORT "1729"
-#define SCHEDULER_IP "127.0.0.1"
-#define SCHEDULER_PORT "1800"
-#define BUFSIZE 8192
-#define BACKLOG 25
-/* end demo stuff */
 
 #include <rte_config.h>
 #include <rte_eal.h>
@@ -53,17 +46,6 @@
 #include <rte_memcpy.h>
 #include <rte_malloc.h>
 
-#define BURST_SIZE 32
-#define MAX_PKT_SIZE 2048
-#define MPOOL_SIZE (1 << 16) - 1
-
-#define MAX_CMD 16
-#define GEN_DEBUG 1
-#define GEN_KEY 0x1234
-#define GEN_DEFAULT_SEED 1234
-#define GEN_DEFAULT_RX_RING_SIZE 512
-#define GEN_DEFAULT_TX_RING_SIZE 256
-
 #define ETH_PREAMBLE 7
 #define ETH_START_OF_FRAME 1
 #define ETH_FCS 4
@@ -77,9 +59,6 @@
 #define FLAG_WAIT 1 << 4
 #define FLAG_UPDATE 1 << 5
 #define FLAG_PRINT 1 << 6
-
-#define NUM_SAMPLES 100000
-#define NUM_ETH_SPEEDS 12
 
 struct rate_stats {
     uint64_t n;
