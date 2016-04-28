@@ -329,7 +329,8 @@ worker_loop(struct pktgen_config *config)
 {
     uint32_t i;
     struct rte_mbuf *bufs[BURST_SIZE];
-    double now, start_time, elapsed_total, elapsed_current, prev_rxtx;
+    double now, start_time, elapsed_total, elapsed_current, prev_rxtx,
+        tx_time = 0;
     struct rate_stats *r_stats =
         rte_malloc("rate_stats", sizeof(struct rate_stats), 0);
     int wamrup;
@@ -367,6 +368,10 @@ worker_loop(struct pktgen_config *config)
             dynamic_tx_rate = 1;
         } else {
             dynamic_tx_rate = 0;
+            if (config->tx_rate > 0) {
+                tx_time = 1000000 * (config->size_max * 8 * BURST_SIZE) /
+                          (1000.0f * config->tx_rate);
+            }
         }
 
         for (;;) {
@@ -395,16 +400,19 @@ worker_loop(struct pktgen_config *config)
                     config->tx_rate = factor * r_stats->avg_rxbps / 1000000;
                     log_info("adjusting txrate %d", config->tx_rate);
                     reset_stats(config, r_stats);
+                    if (config->tx_rate > 0) {
+                        tx_time = 1000000 *
+                                  (config->size_max * 8 * BURST_SIZE) /
+                                  (1000 * config->tx_rate);
+                    } else {
+                        tx_time = 0;
+                    }
                 }
 
                 start_time = get_time_msec();
                 prev_rxtx = 0;
-            } else if (now - prev_rxtx > 0.0023) {
-                /* TODO: Actually calculate the time to send BURST_SIZE at line
-                 * rate instead of this magic 2us
-                 */
-                while (do_rx(config, r_stats, now) == BURST_SIZE)
-                    ;
+            } else if (now - prev_rxtx > tx_time) {
+                while (do_rx(config, r_stats, now) == BURST_SIZE);
                 do_tx(config, r_stats, elapsed_current, now);
                 prev_rxtx = now;
             }
