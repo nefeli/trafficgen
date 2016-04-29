@@ -653,25 +653,6 @@ main(int argc, char *argv[])
         }
 
         for (j = 0; j < n_jobs; j++) {
-            // broadcast command
-            if (is_zero_ether_addr(&cmd[j]->port_mac) &&
-                cmd[j]->flags & FLAG_PRINT) {
-                // FIXME: using the main config instead of copying it over first
-                // struct pktgen_config sconfig[nb_ports];
-                RTE_LCORE_FOREACH_SLAVE(i)
-                {
-                    li = rte_lcore_index(i);
-                    if (!config[li]->active)
-                        continue;
-                    // sconfig[config[li]->port] = config[li];
-                }
-                if (send_stats(config, nb_ports, client_ip, control_port) ==
-                    -1) {
-                    log_err("Failed to send stats to scheduler.");
-                }
-                continue;
-            }
-
             // unicast command
             RTE_LCORE_FOREACH_SLAVE(i)
             {

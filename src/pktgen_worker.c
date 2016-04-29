@@ -172,10 +172,11 @@ generate_packet(struct rte_mbuf *buf, struct rate_stats *r_stats,
     uint32_t rnd = rand_fast(&config->seed);
     uint16_t pkt_size = config->size_min +
                         rnd % (RTE_MAX(config->size_max - config->size_min, 1));
+    uint32_t num_flows = config->num_flows;
     buf->pkt_len = pkt_size;
     buf->data_len = pkt_size;
 
-    uint64_t flow = 1 + rnd % config->num_flows;
+    uint64_t flow = num_flows > 0 ? 1 + rnd % num_flows : 0;
     if (unlikely(config->flags & FLAG_LIMIT_FLOW_LIFE &&
                  now - r_stats->flow_times[flow] >=
                      to_double(rnd, config->life_min, config->life_max))) {
