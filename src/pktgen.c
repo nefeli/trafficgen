@@ -663,13 +663,6 @@ main(int argc, char *argv[])
                      !is_zero_ether_addr(&cmd[j]->port_mac)))
                     continue;
 
-                if (cmd[j]->flags & FLAG_PRINT) {
-                    if (send_stats(&config[li], 1, client_ip, control_port) ==
-                        -1) {
-                        log_err("Failed to send stats to scheduler.");
-                    }
-                }
-
                 unsigned old_flags = 0;
                 config[li]->tx_rate = cmd[j]->tx_rate;
                 config[li]->warmup = cmd[j]->warmup;
@@ -692,6 +685,13 @@ main(int argc, char *argv[])
                 // Previously we were waiting, but aren't anymore.
                 if (!(old_flags & FLAG_WAIT) && (cmd[j]->flags & FLAG_WAIT)) {
                     sem_wait(&config[li]->stop_sempahore);
+                }
+
+                if (cmd[j]->flags & FLAG_PRINT) {
+                    if (send_stats(&config[li], 1, client_ip, control_port) ==
+                        -1) {
+                        log_err("Failed to send stats to scheduler.");
+                    }
                 }
             }
         }
