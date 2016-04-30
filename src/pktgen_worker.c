@@ -388,13 +388,11 @@ worker_loop(struct pktgen_config *config)
 
                 if (unlikely(wamrup && dynamic_tx_rate &&
                              r_stats->avg_txbps > r_stats->avg_rxbps)) {
-                    double factor = RTE_MIN(
-                        1.05,
-                        1 +
-                            0.5 *
-                                (r_stats->avg_txbps / r_stats->avg_rxbps - 1));
-                    config->tx_rate = factor * r_stats->avg_rxbps / 1000000;
-                    log_info("adjusting txrate %d", config->tx_rate);
+                    double factor =
+                        r_stats->avg_rxpps / r_stats->avg_txpps +
+                        0.1 * (1 - r_stats->avg_rxpps / r_stats->avg_txpps);
+                    config->tx_rate = factor * r_stats->avg_txbps / 1000000;
+                    log_info("adjusting txrate %d %f", config->tx_rate, factor);
                     reset_stats(config, r_stats);
                 }
 
