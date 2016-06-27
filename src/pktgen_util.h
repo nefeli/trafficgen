@@ -1,7 +1,6 @@
 #ifndef PKTGEN_UTIL_H
 #define PKTGEN_UTIL_H 1
 
-#include "pktgen_config.h"
 #include "simd.h"
 
 #include <stdio.h>
@@ -12,39 +11,14 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
+#define DAEMON 0
 #define UNUSED __attribute__((__unused__))
 #define RTE_MBUF_FROM_BADDR(ba) (((struct rte_mbuf *)(ba)) - 1)
 
-/* Adapted from Zed's Debugging Macros:
- * http://c.learncodethehardway.org/book/ex20.html
- */
 #if DAEMON
 #include <syslog.h>
-#define log_dbg(M, ...) \
-    syslog(LOG_DEBUG, "(%s:%d) " M, __FILE__, __LINE__, ##__VA_ARGS__)
-
-#define log_err(M, ...) \
-    syslog(LOG_ERR, "(%s:%d) " M, __FILE__, __LINE__, ##__VA_ARGS__)
-
-#define log_warn(M, ...) \
-    syslog(LOG_WARN, "(%s:%d) " M, __FILE__, __LINE__, ##__VA_ARGS__)
-
-#define log_info(M, ...) \
-    syslog(LOG_INFO, "(%s:%d) " M, __FILE__, __LINE__, ##__VA_ARGS__)
 #else
-#define log_dbg(M, ...)                                            \
-    fprintf(stderr, "[DEBUG] (%s:%d) " M "\n", __FILE__, __LINE__, \
-            ##__VA_ARGS__)
-
-#define log_err(M, ...)                                            \
-    fprintf(stderr, "[ERROR] (%s:%d) " M "\n", __FILE__, __LINE__, \
-            ##__VA_ARGS__)
-
-#define log_warn(M, ...) \
-    fprintf(stderr, "[WARN] (%s:%d) " M "\n", __FILE__, __LINE__, ##__VA_ARGS__)
-
-#define log_info(M, ...) \
-    fprintf(stderr, "[INFO] (%s:%d) " M "\n", __FILE__, __LINE__, ##__VA_ARGS__)
+#define syslog(priority, fmt, ...) printf(fmt "\n", ##__VA_ARGS__)
 #endif
 
 typedef struct rte_mbuf **mbuf_array_t;

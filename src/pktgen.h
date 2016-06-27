@@ -1,7 +1,6 @@
 #ifndef PKTGEN_H
 #define PKTGEN_H 1
 
-#include "pktgen_config.h"
 #include "pktgen_util.h"
 
 #include <stdlib.h>
@@ -15,6 +14,7 @@
 #include <signal.h>
 #include <semaphore.h>
 
+/* start demo stuff */
 #include <errno.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -28,6 +28,13 @@
 
 #include "protobufs/job.pb-c.h"
 #include "protobufs/status.pb-c.h"
+
+#define PORT "1729"
+#define SCHEDULER_IP "127.0.0.1"
+#define SCHEDULER_PORT "1800"
+#define BUFSIZE 8192
+#define BACKLOG 25
+/* end demo stuff */
 
 #include <rte_config.h>
 #include <rte_eal.h>
@@ -46,6 +53,18 @@
 #include <rte_memcpy.h>
 #include <rte_malloc.h>
 
+#define BURST_SIZE 32
+#define MAX_PKT_SIZE 1518 //2048
+
+#define MAX_CMD 48
+#define GEN_DEBUG 1
+#define GEN_KEY 0x1234
+#define GEN_DEFAULT_SEED 1234
+#define RX_RING_SIZE 1024
+#define TX_RING_SIZE 128
+#define RX_POOL_SIZE (RX_RING_SIZE * 2)
+#define TX_POOL_SIZE (TX_RING_SIZE * 2)
+
 #define ETH_PREAMBLE 7
 #define ETH_START_OF_FRAME 1
 #define ETH_FCS 4
@@ -59,6 +78,9 @@
 #define FLAG_WAIT 1 << 4
 #define FLAG_UPDATE 1 << 5
 #define FLAG_PRINT 1 << 6
+
+#define NUM_SAMPLES 100000
+#define MAX_NUM_FLOWS 1000000
 
 struct rate_stats {
     uint64_t n;
@@ -100,53 +122,47 @@ struct rate_stats {
     double *samples;
 };
 
+struct port_t {
+    uint8_t id;
+    char name[256];
+    uint8_t socket_id;
+    uint8_t burst;
+    uint16_t nb_tx_desc;
+    uint16_t nb_rx_desc;
+    uint16_t tx_pool_size;
+    uint16_t rx_pool_size;
+    struct ether_addr macaddr;
+    struct rte_mempool *tx_pool;
+};
+
 struct pktgen_config {
     uint8_t active;
-
     uint8_t run_id;
     uint8_t lcore_id;
     uint8_t socket_id;
-    uint8_t port_id;
-    uint32_t port_speed;
-
     uint8_t role;
-
     int tx_rate;
     uint32_t warmup;
     uint32_t duration;
-
     uint32_t num_flows;
     uint32_t ip_src;
     uint32_t ip_min;
-
     uint8_t proto;
     uint16_t port_min;
     uint16_t port_max;
-
     uint16_t size_min;
     uint16_t size_max;
-
     double life_min;
     double life_max;
-
     double start_time;
-
-    struct rte_mempool *tx_pool;
-    struct rte_mempool *rx_pool;
-
-    unsigned rx_ring_size;
-    unsigned tx_ring_size;
-
     unsigned flags;
-
     uint64_t seed;
     struct rate_stats stats;
-
     struct ether_addr src_mac;
     struct ether_addr dst_mac;
-    struct ether_addr port_mac;
-
-    sem_t stop_sempahore;
+    char port_str[256];
+    struct port_t port;
+    sem_t stop_semaphore;
 };
 
 struct pkt {
@@ -162,7 +178,8 @@ struct pkt {
 };
 
 static const struct rte_eth_conf port_conf_default = {
-    .rxmode = {.max_rx_pkt_len = ETHER_MAX_LEN}};
+    .rxmode = {.max_rx_pkt_len = ETHER_MAX_LEN}
+};
 
 static struct ether_addr zero_mac UNUSED = {
     {0x00, 0x00, 0x00, 0x00, 0x00, 0x00}};
