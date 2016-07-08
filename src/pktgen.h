@@ -57,7 +57,6 @@
 #define MAX_PKT_SIZE 1518 //2048
 
 #define MAX_CMD 48
-#define GEN_DEBUG 1
 #define GEN_KEY 0x1234
 #define GEN_DEFAULT_SEED 1234
 #define RX_RING_SIZE 1024

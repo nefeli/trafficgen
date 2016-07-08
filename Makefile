@@ -23,6 +23,8 @@ SRCS = src/pktgen.c src/pktgen_worker.c src/protobufs/job.pb-c.c \
 
 .PHONY: format dpdk
 
+.DEFAULT_GOAL := bin/pktgen
+
 bin/pktgen: ${SRCS}
 	mkdir -p bin
 	${CC} ${CFLAGS} ${LDFLAGS} -o $@ ${SRCS} ${LIBS}

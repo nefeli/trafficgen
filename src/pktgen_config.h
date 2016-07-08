@@ -16,7 +16,6 @@
 #define MPOOL_SIZE (1 << 16) - 1
 
 #define MAX_CMD 16
-#define GEN_DEBUG 1
 #define GEN_KEY 0x1234
 #define GEN_DEFAULT_SEED 1234
 #define GEN_DEFAULT_RX_RING_SIZE 512

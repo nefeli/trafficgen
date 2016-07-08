@@ -1,6 +1,6 @@
 #include "pktgen.h"
 #include "pktgen_worker.c"
-
+#include "log.h"
 #include <assert.h>
 
 static inline int
@@ -115,7 +115,7 @@ port_init(struct port_t *port)
         return retval;
     }
 
-   syslog(LOG_INFO, "Port %u MAC: %02" PRIx8 " %02" PRIx8 " %02" PRIx8
+   logmsg(LOG_INFO, "Port %u MAC: %02" PRIx8 " %02" PRIx8 " %02" PRIx8
                      " %02" PRIx8 " %02" PRIx8 " %02" PRIx8,
            port->id,
            port->macaddr.addr_bytes[0], port->macaddr.addr_bytes[1],
@@ -182,7 +182,7 @@ handle_recv(int fd, char *request)
     char len_buf[4];
 
     if (read_n_bytes(fd, 4, len_buf) <= 0) {
-        syslog(LOG_ERR, "Failed to read request length.");
+        logmsg(LOG_ERR, "Failed to read request length.");
         return -1;
     }
 
@@ -190,12 +190,12 @@ handle_recv(int fd, char *request)
     req_len = ntohl(*x);
 
     if (req_len > 8000) {
-        syslog(LOG_ERR, "Invalid request length %d > 8000.", req_len);
+        logmsg(LOG_ERR, "Invalid request length %d > 8000.", req_len);
         return -1;
     }
 
     if (read_n_bytes(fd, req_len, request) <= 0) {
-        syslog(LOG_ERR, "Failed to read request.");
+        logmsg(LOG_ERR, "Failed to read request.");
         return -1;
     }
 
@@ -219,11 +219,11 @@ send_status(int fd, int status, struct pktgen_config **config, uint16_t n)
         i = 0;
         RTE_LCORE_FOREACH_SLAVE(j) {
             li = rte_lcore_index(j);
-            if (!config[li]->active)
+            if (!config[li]->active) {
                 continue;
+            }
             p_stats[i] = malloc(sizeof(PortStats));
             port_stats__init(p_stats[i]);
-
             p_stats[i]->n = config[li]->stats.n;
             p_stats[i]->avg_rxmpps = config[li]->stats.avg_rxpps / 1000000;
             p_stats[i]->std_rxmpps = sqrt(config[li]->stats.var_rxpps) / 1000000;
@@ -256,7 +256,7 @@ send_status(int fd, int status, struct pktgen_config **config, uint16_t n)
             strncpy(p_stats[i]->port, config[li]->port_str, 18);
             //ether_format_addr(p_stats[i]->port, 18, &config[li]->port.macaddr);
 
-            syslog(LOG_INFO,
+            logmsg(LOG_INFO,
                     "[port/lcore/socket=%2d;%s,%2d,%1d] rx/tx: mpps=%06.3f/%06.3f "
                     "wire_mbps=%06.1f/%06.1f",
                     config[li]->port.id, p_stats[i]->port, config[li]->lcore_id,
@@ -284,7 +284,7 @@ send_status(int fd, int status, struct pktgen_config **config, uint16_t n)
     status__pack(&s, (void *)((uint8_t *)(buf) + 4));
 
     if (send(fd, buf, len + 4, 0) < 0) {
-        syslog(LOG_ERR, "Failed to send status to the scheduler.");
+        logmsg(LOG_ERR, "Failed to send status to the scheduler.");
         return -1;
     }
 
@@ -305,14 +305,14 @@ handle_request(int fd, struct pktgen_config **cmd)
     char request[8192];
 
     if ((request_bytes = handle_recv(fd, request)) <= 0) {
-        syslog(LOG_ERR, "Failed to recv request.");
+        logmsg(LOG_ERR, "Failed to recv request.");
         return -1;
     }
 
     Request *r = request__unpack(NULL, request_bytes, (void *)request);
 
     if (r == NULL) {
-        syslog(LOG_ERR, "Failed to unpack request.");
+        logmsg(LOG_ERR, "Failed to unpack request.");
         return -1;
     }
 
@@ -364,7 +364,7 @@ handle_request(int fd, struct pktgen_config **cmd)
         if (cmd[i]->life_min >= 0)
             cmd[i]->flags |= FLAG_LIMIT_FLOW_LIFE;
 
-        syslog(LOG_ERR,
+        logmsg(LOG_ERR,
                "request: {"
                "tx_rate: %d"
                ", warmup: %u"
@@ -438,9 +438,9 @@ handle_client(int fd,
         struct pktgen_config **config,
         struct pktgen_config **cmd) {
     uint8_t port_id, nb_ports = rte_eth_dev_count();
-    int n_jobs, retval, i, j, li = 0, socket_id;
+    int n_jobs, retval, i, j, k, li = 0, socket_id;
     if ((n_jobs = handle_request(fd, cmd)) == -1) {
-        syslog(LOG_ERR, "Failed to handle request.");
+        logmsg(LOG_ERR, "Failed to handle request.");
         return -1;
     }
 
@@ -452,8 +452,72 @@ handle_client(int fd,
             if (cmd[j]->flags & FLAG_PRINT) {
                 // FIXME: maybe send a copy of config
                 if (send_status(fd, STATUS__TYPE__STATS, config, nb_ports) == -1) {
-                    syslog(LOG_ERR, "Failed to send stats.");
+                    logmsg(LOG_ERR, "Failed to send stats.");
                     return -1;
+                }
+            } else {
+                int port_to_core[nb_ports];
+                int assigned_core[rte_lcore_count()];
+                int failed = 0;
+                for (k = 0; k < rte_lcore_count(); k++) {
+                    assigned_core[k] = 0;
+                }
+                for (k = 0; k < nb_ports; k++) {
+                    port_to_core[k] = -1;
+                    RTE_LCORE_FOREACH_SLAVE(i) {
+                        li = rte_lcore_index(i);
+                        socket_id = rte_lcore_to_socket_id(i);
+                        if (!config[li] -> active &&
+                            socket_id == ports[k].socket_id &&
+                            !assigned_core[li]) {
+                            assigned_core[li] = 1;
+                            port_to_core[k] = li;
+                            logmsg(LOG_ERR, "Assigning port %d to core %d\n", k, li);
+                            break;
+                        }
+                    }
+                    if (port_to_core[k] == -1) {
+                        logmsg(LOG_ERR, "Not enough cores to assign to all ports");
+                        failed = 1;
+                        // Try and send status.
+                        if (send_status(fd, STATUS__TYPE__FAIL, NULL, 0) == -1) {
+                            logmsg(LOG_ERR, "Failed to send status");
+                            return -1;
+                        }
+                        break;
+                    }
+                }
+                if (!failed) {
+                    if (send_status(fd, STATUS__TYPE__SUCCESS, NULL, 0))
+                        return -1;
+                    for (k = 0; k < nb_ports; k++) {
+                        li = port_to_core[k];
+                        logmsg(LOG_ERR, "Running port %d on core %d\n", k, li);
+                        config[li]->active = 1;
+                        config[li]->port = ports[k];
+                        config[li]->tx_rate = cmd[j]->tx_rate;
+                        config[li]->warmup = cmd[j]->warmup;
+                        config[li]->duration = cmd[j]->duration;
+                        config[li]->num_flows = cmd[j]->num_flows;
+                        config[li]->ip_min = 0xAFCD0123;
+                        config[li]->port_min = cmd[j]->port_min;
+                        config[li]->port_max = cmd[j]->port_max;
+                        config[li]->proto = cmd[j]->proto;
+                        config[li]->size_min = cmd[j]->size_min;
+                        config[li]->size_max = cmd[j]->size_max;
+                        config[li]->life_min = cmd[j]->life_min;
+                        config[li]->life_max = cmd[j]->life_max;
+                        ether_addr_copy(&cmd[j]->src_mac, &config[li]->src_mac);
+                        ether_addr_copy(&cmd[j]->dst_mac, &config[li]->dst_mac);
+                        strncpy(config[li]->port_str, cmd[j]->port_str, 256);
+
+                        unsigned old_flags =
+                            __sync_lock_test_and_set(&config[li]->flags, cmd[j]->flags);
+                        // Previously we were waiting, but aren't anymore.
+                        if (!(old_flags & FLAG_WAIT) && (cmd[j]->flags & FLAG_WAIT)) {
+                            sem_wait(&config[li]->stop_semaphore);
+                        }
+                    }
                 }
             }
             continue;
@@ -471,13 +535,17 @@ handle_client(int fd,
         }
 
         if (i == RTE_MAX_LCORE) {
-            syslog(LOG_ERR, "Not enough cores to run job %d", j);
+            logmsg(LOG_ERR, "Not enough cores to run job %d", j);
+            if (send_status(fd, STATUS__TYPE__FAIL, NULL, 0) == -1) {
+                logmsg(LOG_ERR, "Failed to send status");
+                return -1;
+            }
             continue;
         }
 
         if (cmd[j]->flags & FLAG_PRINT) {
             if (send_status(fd, STATUS__TYPE__STATS, &config[li], 1) == -1) {
-                syslog(LOG_ERR, "Failed to send stats.");
+                logmsg(LOG_ERR, "Failed to send stats.");
                 return -1;
             }
         } else {

@@ -2,6 +2,7 @@
 
 #include <numaif.h>
 #include <rte_memcpy.h>
+#include "log.h"
 
 static inline void
 init_mbuf(struct rte_mbuf *buf, struct pktgen_config *config)
@@ -126,8 +127,8 @@ update_stats(struct pktgen_config *config UNUSED, struct rate_stats *s,
     s->tx_bytes = 0;
     s->tx_pkts = 0;
 
-#if 0//GEN_DEBUG
-    syslog(LOG_INFO,
+#ifndef NDEBUG
+    logmsg(LOG_INFO,
            "[port=%d] rx/tx stats: mpps=%.3f/%.3f mbps=%.1f/%1.f wire_mbps=%.1f/%.1f",
            config->port.id,
            s->avg_rxpps / 1000000, s->avg_txpps / 1000000,
