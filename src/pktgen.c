@@ -603,20 +603,6 @@ main(int argc, char *argv[])
         rte_exit(EXIT_FAILURE, "Args: LISTEN_PORT");
     }
 
-    struct sockaddr_storage addr_storage;
-    struct sockaddr *addr = (struct sockaddr *)&addr_storage;
-    socklen_t sin_size = sizeof addr_storage;
-
-    int fd_server = create_and_bind_socket(argv[1]);
-    int fd_client;
-    if (fd_server < 0) {
-        rte_exit(EXIT_FAILURE, "Failed to create/bind to socket.");
-    }
-
-    if (listen(fd_server, BACKLOG) == -1) {
-        rte_exit(EXIT_FAILURE, "Failed to listen to socket.");
-    }
-
     int i, li, socket_id;  // li = lcore_index
     uint8_t port_id;
     struct pktgen_config *cmd[MAX_CMD], *config[rte_lcore_count()];
@@ -656,6 +642,20 @@ main(int argc, char *argv[])
         sem_init(&config[li]->stop_semaphore, 0, 0);
         if (rte_get_master_lcore() != i)
             rte_eal_remote_launch(worker_loop, (void *)config[li], i);
+    }
+
+    struct sockaddr_storage addr_storage;
+    struct sockaddr *addr = (struct sockaddr *)&addr_storage;
+    socklen_t sin_size = sizeof addr_storage;
+
+    int fd_server = create_and_bind_socket(argv[1]);
+    int fd_client;
+    if (fd_server < 0) {
+        rte_exit(EXIT_FAILURE, "Failed to create/bind to socket.");
+    }
+
+    if (listen(fd_server, BACKLOG) == -1) {
+        rte_exit(EXIT_FAILURE, "Failed to listen to socket.");
     }
 
     for (;;) {
