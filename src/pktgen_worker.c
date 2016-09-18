@@ -14,6 +14,11 @@ init_mbuf(struct rte_mbuf *buf, struct pktgen_config *config)
     struct tcp_hdr *tcp_hdr;
     uint16_t pkt_size = 60;
 
+    uint8_t gtpu_and_gpdu[36] = {0x30, 0xff, 0x0, 0x80, 0x86, 0x61, 0x33, 0xe1,
+        0x45, 0x0, 0x0, 0x80, 0x37, 0x42, 0x40, 0x0, 0x40, 0x11, 0x36, 0x6a,
+        0x0a, 0x01, 0x0, 0x02, 0xc0, 0xbc, 0x02, 0x02, 0x19, 0x6b, 0x03, 0xe9,
+        0x0, 0x6c, 0xcd, 0x3e};
+
     buf->pkt_len = pkt_size;
     buf->data_len = pkt_size;
 
@@ -52,6 +57,9 @@ init_mbuf(struct rte_mbuf *buf, struct pktgen_config *config)
         udp_hdr->dgram_cksum = 0;
         udp_hdr->dgram_len = rte_cpu_to_be_16(
             pkt_size - sizeof(struct ether_hdr) - sizeof(*ip_hdr));
+        if (config->flags & FLAG_GTPU) {
+            memcpy((void*)(udp_hdr + 1), gtpu_and_gpdu, 36);
+        }
     } else {
         tcp_hdr = (struct tcp_hdr *)(ip_hdr + 1);
         tcp_hdr->data_off = ((sizeof(struct tcp_hdr) / sizeof(uint32_t)) << 4);
@@ -212,6 +220,9 @@ generate_packet(struct rte_mbuf *buf, struct rate_stats *r_stats,
         udp_hdr->dgram_len = rte_cpu_to_be_16(
             pkt_size - sizeof(struct ether_hdr) - sizeof(*ip_hdr));
         ptr = (uint8_t *)(udp_hdr + 1);
+        if (config->flags & FLAG_GTPU) {
+            ptr += 36;
+        }
     } else {
         tcp_hdr = (struct tcp_hdr *)(ip_hdr + 1);
         tcp_hdr->src_port = sport;
@@ -257,6 +268,9 @@ do_rx(struct pktgen_config *config, struct rate_stats *r_stats, double now)
                     bufs[i], uint8_t *, sizeof(struct ether_hdr) +
                                             sizeof(struct ipv4_hdr) +
                                             sizeof(struct udp_hdr));
+                if (config->flags & FLAG_GTPU) {
+                    p += 36;
+                }
                 double *ts = (double *)(p + 1);
                 if (*p == config->run_id && *ts > 0) {
                     // microseconds

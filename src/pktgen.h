@@ -59,6 +59,7 @@
 #define FLAG_WAIT 1 << 4
 #define FLAG_UPDATE 1 << 5
 #define FLAG_PRINT 1 << 6
+#define FLAG_GTPU 1 << 7
 
 struct rate_stats {
     uint64_t n;

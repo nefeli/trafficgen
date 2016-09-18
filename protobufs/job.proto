@@ -20,6 +20,7 @@ message Job {
     optional string src_mac = 17;
     optional string dst_mac = 18;
     optional string port = 19;
+    optional bool gtpu = 20;
 }
 
 message Request {

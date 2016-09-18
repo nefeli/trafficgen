@@ -382,6 +382,7 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
         j = r->jobs[i];
         cmd[i]->flags &= !FLAG_PRINT;
         cmd[i]->flags &= !FLAG_WAIT;
+        cmd[i]->flags &= !FLAG_GTPU;
         cmd[i]->port_mac = zero_mac;
         cmd[i]->src_mac = zero_mac;
         cmd[i]->dst_mac = zero_mac;
@@ -416,6 +417,9 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
         if (j->print)
             cmd[i]->flags |= (FLAG_PRINT | FLAG_WAIT);
 
+        if (j->gtpu)
+            cmd[i]->flags |= FLAG_GTPU;
+
         if (j->tcp)
             cmd[i]->proto = IPPROTO_TCP;
         else
@@ -444,6 +448,7 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
             ", randomize: %d"
             ", latency: %d"
             ", online: %d"
+            ", gtpu: %d"
             ", stop: %d"
             ", print: %d}",
             cmd[i]->tx_rate, cmd[i]->warmup, cmd[i]->duration,
@@ -454,6 +459,7 @@ response_handler(int fd UNUSED, char *request, int request_bytes,
             (cmd[i]->flags & FLAG_RANDOMIZE_PAYLOAD) != 0,
             (cmd[i]->flags & FLAG_MEASURE_LATENCY) != 0,
             (cmd[i]->flags & FLAG_GENERATE_ONLINE) != 0,
+            (cmd[i]->flags & FLAG_GTPU) != 0,
             (cmd[i]->flags & FLAG_WAIT) != 0,
             (cmd[i]->flags & FLAG_PRINT) != 0);
 #endif

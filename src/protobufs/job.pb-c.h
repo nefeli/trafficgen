@@ -62,10 +62,12 @@ struct  _Job
   char *src_mac;
   char *dst_mac;
   char *port;
+  protobuf_c_boolean has_gtpu;
+  protobuf_c_boolean gtpu;
 };
 #define JOB__INIT \
  { PROTOBUF_C_MESSAGE_INIT (&job__descriptor) \
-    , 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, NULL, NULL, NULL }
+    , 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, 0,0, NULL, NULL, NULL, 0,0 }
 
 
 struct  _Request
