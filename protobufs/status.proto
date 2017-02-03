@@ -1,0 +1,47 @@
+syntax = "proto2";
+
+message PortStats {
+    required uint64 n = 1;
+    required uint64 n_rtt = 2;
+    required string port = 3;
+
+    required double avg_rxmpps = 4;
+    required double std_rxmpps = 5;
+    required double avg_rxbps = 6;
+    required double std_rxbps = 7;
+    required double avg_txmpps = 8;
+    required double std_txmpps = 9;
+    required double avg_txbps = 10;
+    required double std_txbps = 11;
+    required double avg_txwire = 12;
+    required double std_txwire = 13;
+    required double avg_rxwire = 14;
+    required double std_rxwire = 15;
+
+    required double rtt_avg = 16;
+    required double rtt_std = 17;
+    required double rtt_0 = 18;
+    required double rtt_25 = 19;
+    required double rtt_50 = 20;
+    required double rtt_75 = 21;
+    required double rtt_90 = 22;
+    required double rtt_95 = 23;
+    required double rtt_99 = 24;
+    required double rtt_100 = 25;
+
+    required uint64 tx_bytes = 26;
+    required uint64 tx_pkts = 27;
+    required uint64 rx_bytes = 28;
+    required uint64 rx_pkts = 29;
+}
+
+message Status {
+    enum Type {
+        FAIL = 0;
+        SUCCESS = 1;
+        STATS = 2;
+    }
+    required int32 port = 1;
+    optional Type type = 2;
+    repeated PortStats stats = 3;
+}

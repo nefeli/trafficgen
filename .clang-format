@@ -1,0 +1,10 @@
+BasedOnStyle: Google
+IndentWidth: 4
+UseTab: Never
+BreakBeforeBraces: Linux
+BreakBeforeBinaryOperators: false
+AllowShortLoopsOnASingleLine: true
+AllowShortIfStatementsOnASingleLine: false
+AlwaysBreakAfterDefinitionReturnType: true
+IndentCaseLabels: false
+ColumnLimit: 80

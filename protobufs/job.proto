@@ -1,0 +1,27 @@
+syntax = "proto2";
+
+message Job {
+    optional int32 tx_rate = 1;
+    optional int32 duration = 2;
+    optional int32 warmup = 3;
+    optional int32 num_flows = 4;
+    optional int32 port_min = 5;
+    optional int32 port_max = 6;
+    optional int32 size_min = 7;
+    optional int32 size_max = 8;
+    optional float life_min = 9;
+    optional float life_max = 10;
+    optional bool randomize = 11;
+    optional bool latency = 12;
+    optional bool online = 13;
+    optional bool stop = 14;
+    optional bool print = 15;
+    optional bool tcp = 16;
+    optional string src_mac = 17;
+    optional string dst_mac = 18;
+    optional string port = 19;
+}
+
+message Request {
+    repeated Job jobs = 1;
+}
