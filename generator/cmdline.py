@@ -5,21 +5,90 @@ import pprint
 import cStringIO
 import tempfile
 import time
+import threading
 
 import bess
 import cli
+from module import *
 
 import commands as bess_commands
 import generator_commands
+from common import *
 
 class TGENCLI(cli.CLI):
-
     def __init__(self, bess, cmd_db, **kwargs):
         self.bess = bess
+        self.bess_lock = threading.Lock()
         self.cmd_db = cmd_db
+        self.__running = dict() 
+        self.__running_lock = threading.Lock()
+        self.__monitor_thread = None
+        self.__done = False
+        self.__done_lock = threading.Lock()
         self.this_dir = bess_path = os.getenv('BESS_PATH') + '/bessctl'
 
         super(TGENCLI, self).__init__(self.cmd_db.cmdlist, **kwargs)
+
+    def port_is_running(self, port):
+        with self.__running_lock:
+            ret = port in self.__running
+        return ret
+
+    def add_session(self, sess):
+        with self.__running_lock:
+            self.__running[sess.port()] = sess
+
+    def remove_session(self, port):
+        with self.__running_lock:
+            ret = self.__running.pop(port, None)
+        return ret
+
+    def _done(self):
+        with self.__done_lock:
+            ret = self.__done
+        return ret
+
+    def _finish(self):
+        with self.__done_lock:
+            self.__done = True
+        self.__monitor_thread.join()
+
+    def monitor_thread(self):
+        # Load module constructors
+        while True:
+            try:
+                with self.bess_lock:
+                    class_names = self.bess.list_mclasses().names
+                    for name in class_names:
+                        if name in generator_commands.mclasses:
+                            raise cli.InternalError(
+                                    'Invalid module class name: %s' % name)
+
+                        generator_commands.mclasses[name] = \
+                            type(str(name), (Module,), {'bess': self.bess,
+                                 'choose_arg': generator_commands._choose_arg})
+                break
+            except:
+                time.sleep(1)
+
+        while not self._done():
+            now = time.time()
+            with self.__running_lock:
+                try:
+                    with self.bess_lock:
+                        for port, sess in self.__running.items():
+                            sess.update_stats(self, now)
+
+                        self.bess.pause_all()
+                        try:
+                            for port, sess in self.__running.items():
+                                sess.adjust_tx_rate()
+                        finally:
+                            self.bess.resume_all()
+                except:
+                    pass
+            sleep_us(ADJUST_WINDOW_US)
+        print('Port monitor thread exiting...')
 
     def get_var_attrs(self, var_token, partial_word):
         return self.cmd_db.get_var_attrs(self, var_token, partial_word)
@@ -97,7 +166,13 @@ class TGENCLI(cli.CLI):
             self.ferr.write('%s is not available: %s' % (log_path, str(e)))
 
     def loop(self):
-        super(TGENCLI, self).loop()
+        print('Spawning port monitor thread...')
+        self.__monitor_thread = threading.Thread(target=self.monitor_thread)
+        self.__monitor_thread.start()
+        try:
+            super(TGENCLI, self).loop()
+        finally:
+            self._finish()
         self.bess.disconnect()
 
     def get_prompt(self):

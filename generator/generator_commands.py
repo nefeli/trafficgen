@@ -18,8 +18,12 @@ import signal
 import collections
 import scapy.all as scapy
 
-import sugar
 import commands as bess_commands
+from module import *
+
+from common import *
+
+mclasses = dict()
 
 @staticmethod
 def _choose_arg(arg, kwargs):
@@ -28,12 +32,12 @@ def _choose_arg(arg, kwargs):
             raise TypeError('You cannot specify both arg and keyword args')
 
         for key in kwargs:
-            if isinstance(kwargs[key], (Module, Port)):
+            if isinstance(kwargs[key], (Module,)):
                 kwargs[key] = kwargs[key].name
 
         return kwargs
 
-    if isinstance(arg, (Module, Port)):
+    if isinstance(arg, (Module,)):
         return arg.name
     else:
         return arg
@@ -226,42 +230,79 @@ tcp = scapy.TCP(sport=src_port, dport=12345, seq=12345)
 payload = "meow"
 DEFAULT_TEMPLATE = str(eth/ip/tcp/payload)
 
-def FlowGen(cli, pps=1e6, pkt_size=60, num_flows=1e3, flow_duration=30,
-            flow_rate=None, arrival='uniform', duration='uniform',
-            quick_rampup=True, template=DEFAULT_TEMPLATE):
-    if flow_rate is None:
-        flow_rate = num_flows / flow_duration
+def FlowGen(spec, quick_rampup=True, template=DEFAULT_TEMPLATE):
+    if spec.flow_rate is None:
+        spec.flow_rate = spec.num_flows / spec.flow_duration
     arg = {
         'template': template,
-        'pps': pps,
-        'flow_rate': flow_rate,
-        'flow_duration': flow_duration,
-        'arrival': arrival,
-        'duration': duration,
+        'pps': spec.pps,
+        'flow_rate': spec.flow_rate,
+        'flow_duration': spec.flow_duration,
+        'arrival': spec.arrival,
+        'duration': spec.duration,
         'quick_rampup': quick_rampup,
     }
-    return cli.bess.create_module('FlowGen', arg=arg)
+    return mclasses['FlowGen'](**arg)
+
+
+def QueueInc(port, name, qid=0):
+    arg = {'port': port, 'name': name, 'qid': qid}
+    return mclasses['QueueInc'](**arg)
+
+
+def QueueOut(port, qid=0):
+    arg = {'port': port, 'qid': qid}
+    return mclasses['QueueOut'](**arg)
+
+
+def Sink():
+    return mclasses['Sink']()
+
 
 """
 TRAFFIC_SPEC:
     loss_rate -- target percentage of packet loss (default 0.0)
-    pps -- traffic rate in pps
+    pps -- tx rate in pps
     pkt_size -- packet size
     num_flows -- number of flows
-    flow_dur -- duration of each flows
+    flow_duration -- duration of each flows
     flow_rate -- flow arrival rate
-    arrival_dist -- distribution of flows (either 'uniform' or 'exponential')
-    dur_dist -- distribution of flow durations (either 'uniform' or 'pareto')
+    arrival -- distribution of flows (either 'uniform' or 'exponential')
+    duration -- distribution of flow durations (either 'uniform' or 'pareto')
 """
 @cmd('start PORT [TRAFFIC_SPEC...]', 'Start sending packets on a port')
 def start(cli, port, spec):
-    cli.bess.pause_all()
-    f = FlowGen(cli)
-    s = cli.bess.create_module('Sink')
-    cli.bess.connect_modules(f.name, s.name)
-    cli.bess.resume_all()
+    if cli.port_is_running(port):
+        return cli.CommandError("Port %s is already running" % (port,))
+
+    if spec is not None:
+        pprint.pprint(spec)
+        ts = TrafficSpec(**spec)
+    else:
+        ts = TrafficSpec()
+
+    with cli.bess_lock:
+        cli.bess.pause_all()
+        f = FlowGen(ts)
+        qo = QueueOut(port)
+        qi = QueueInc(port, 'qinc_%s' % (port,))
+        sn = Sink()
+        cli.bess.connect_modules(f.name, qo.name)
+        cli.bess.resume_all()
+
+    cli.add_session(Session(port, ts, [f, qo], [qi, sn]))
 
 
 @cmd('stop PORT...', 'Stop sending packets on a set of ports')
 def stop(cli, ports):
-    pass
+    for port in ports:
+        sess = cli.remove_session(port)
+        with cli.bess_lock:
+            cli.bess.pause_all()
+            try:
+                for m in sess.tx_pipeline():
+                    cli.bess.destroy_module(m.name)
+                for m in sess.rx_pipeline():
+                    cli.bess.destroy_module(m.name)
+            finally:
+                cli.bess.resume_all()
