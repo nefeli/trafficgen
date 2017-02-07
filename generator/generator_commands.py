@@ -44,9 +44,15 @@ def _choose_arg(arg, kwargs):
 def setup_mclasses(cli):
     MCLASSES = [
         'FlowGen',
+        'IPChecksum',
         'QueueInc',
         'QueueOut',
+        'RandomUpdate',
+        'Rewrite',
+        'RoundRobin',
+        'Source',
         'Sink',
+        'Update',
     ]
     for name in MCLASSES:
         if name in globals():
@@ -84,6 +90,14 @@ def get_var_attrs(cli, var_token, partial_word):
 
         elif var_token == '[PORT_ARGS...]':
             var_type = 'map'
+
+        elif var_token == 'MODE':
+            var_type = 'name'
+            var_desc = 'which type of traffic to generate'
+            try:
+                var_candidates = ['flowgen', 'udp', 'http']
+            except:
+                pass
 
         elif var_token == 'PORT':
             var_type = 'name'
@@ -231,6 +245,17 @@ def help(cli):
         cli.fout.write('  %-50s%s\n' % (syntax, desc))
 
 
+def _connect_pipeline(cli, pipe):
+    with cli.bess_lock:
+        cli.bess.pause_all()
+        for i in range(len(pipe)):
+            u = pipe[i]
+            if i < len(pipe) - 1:
+                v =  pipe[i + 1]
+                cli.bess.connect_modules(u.name, v.name)
+        cli.bess.resume_all()
+
+
 src_ether='02:1e:67:9f:4d:aa'
 dst_ether='02:1e:67:9f:4d:bb'
 eth = scapy.Ether(src=src_ether, dst=dst_ether)
@@ -253,34 +278,150 @@ TRAFFIC_SPEC:
     arrival -- distribution of flows (either 'uniform' or 'exponential')
     duration -- distribution of flow durations (either 'uniform' or 'pareto')
 """
-@cmd('start PORT [TRAFFIC_SPEC...]', 'Start sending packets on a port')
-def start(cli, port, spec):
+def _start_flowgen(cli, port, spec):
+    if spec.flow_rate is None:
+        spec.flow_rate = spec.num_flows / spec.flow_duration
+
+    with cli.bess_lock:
+        cli.bess.pause_all()
+        f = FlowGen(template=DEFAULT_TEMPLATE, pps=spec.pps,
+                    flow_rate=spec.flow_rate, flow_duration=spec.flow_duration,
+                    arrival=spec.arrival, duration=spec.duration,
+                    quick_rampup=True)
+        qo = QueueOut(port=port, qid=0)
+        tx_pipe = [f, qo]
+
+        qi = QueueInc(port=port, name='qinc_%s' % (port,), qid=0)
+        sn = Sink()
+        rx_pipe = [qi, sn]
+        cli.bess.resume_all()
+
+    return (tx_pipe, rx_pipe)
+
+
+def _build_pkt(size):
+    eth = scapy.Ether(src='02:1e:67:9f:4d:ae', dst='06:16:3e:1b:72:32')
+    ip = scapy.IP(src='192.168.0.1', dst='10.0.0.1')
+    udp = scapy.UDP(sport=10001, dport=10002, chksum=0)
+    payload = ('hello' + '0123456789' * 200)[:size-len(eth/ip/udp)]
+    pkt = eth/ip/udp/payload
+    pkt.show()
+    return str(pkt)
+
+"""
+TRAFFIC_SPEC:
+    pkt_size -- packet size (default: 60)
+    num_flows -- number of flows (default: 1)
+    imix -- generate imix traffic if non-zero (default: 0)
+    mbps -- max tx rate (default: 0 i.e., unlimited)
+"""
+def _start_udp(cli, port, spec):
+    if spec.imix:
+        pkt_templates = [
+            _build_pkt(60),
+            _build_pkt(60),
+            _build_pkt(60),
+            _build_pkt(60),
+            _build_pkt(60),
+            _build_pkt(60),
+            _build_pkt(60),
+            _build_pkt(590),
+            _build_pkt(590),
+            _build_pkt(590),
+            _build_pkt(1514)
+        ]
+    else:
+        pkt_templates = [_build_pkt(spec.pkt_size)]
+
+    num_flows = spec.num_flows
+
+    rx_pipe = []
+    with cli.bess_lock:
+        cli.bess.pause_all()
+        tx_pipe = [
+            Source(),
+            Rewrite(templates=pkt_templates),
+            RandomUpdate(fields=[{'offset': 30,
+                                   'size': 4,
+                                   'min': 0x0a000001,
+                                   'max': 0x0a000001 + num_flows - 1}]),
+            IPChecksum(),
+            QueueOut(port=port, qid=0)
+        ]
+
+        rx_pipe =[QueueInc(port=port, qid=0), Sink()]
+        cli.bess.resume_all()
+
+    return (tx_pipe, rx_pipe)
+
+
+"""
+TRAFFIC_SPEC:
+    num_flows -- number of flows
+    src_mac -- source mac address
+    dst_mac -- destination mac address
+    src_ip -- start of source ip range
+    dst_ip -- start of destination ip range
+    src_port -- port to send http requests from
+"""
+def _start_http(cli, port, spec):
+    SEQNO = 12345
+    PORT_HTTP = 80
+    eth = scapy.Ether(src=spec.src_mac, dst=spec.dst_mac)
+    ip = scapy.IP(src=spec.src_ip, dst=spec.dst_ip)
+    tcp = scapy.TCP(sport=spec.src_port, dport=PORT_HTTP, seq=SEQNO)
+
+    payload_prefix = 'GET /pub/WWW/TheProject.html HTTP/1.1\r\nHost: www.'
+    payload = payload_prefix + 'aaa.com\r\n\r\n'
+    pkt_headers = eth/ip/tcp
+    pkt_template = str(eth/ip/tcp/payload)
+
+    tx_pipe = [
+        FlowGen(template=pkt_template, pps=10e6, flow_rate = spec.num_flows,
+                flow_duration = 5, arrival='uniform', duration='uniform',
+                quick_rampup=False),
+        RandomUpdate(fields=[{'offset': len(pkt_headers)  + len(payload_prefix),
+                     'size': 1, 'min': 97, 'max': 122}]),
+        RandomUpdate(fields=[{'offset': len(pkt_headers)  + \
+                                        len(payload_prefix) + 1,
+                              'size': 1, 'min': 97, 'max': 122}]),
+        IPChecksum(),
+        QueueOut(port=port, qid=0)
+    ]
+
+    rx_pipe = [QueueInc(port=port, qid=0), Sink()]
+
+    return (tx_pipe, rx_pipe)
+
+
+@cmd('start PORT MODE [TRAFFIC_SPEC...]', 'Start sending packets on a port')
+def start(cli, port, mode, spec):
     setup_mclasses(cli)
     if cli.port_is_running(port):
         return cli.CommandError("Port %s is already running" % (port,))
 
-    if spec is not None:
-        pprint.pprint(spec)
-        ts = TrafficSpec(**spec)
-    else:
-        ts = TrafficSpec()
+    if mode == 'flowgen':
+        if spec is not None:
+            ts = FlowGenSpec(**spec)
+        else:
+            ts = FlowGenSpec()
+        tx_pipe, rx_pipe = _start_flowgen(cli, port, spec=ts)
+    elif mode == 'udp':
+        if spec is not None:
+            ts = UdpSpec(**spec)
+        else:
+            ts = UdpSpec()
+        tx_pipe, rx_pipe = _start_udp(cli, port, spec=ts)
+    elif mode == 'http':
+        if spec is not None:
+            ts = HttpSpec(**spec)
+        else:
+            ts = HttpSpec()
+        tx_pipe, rx_pipe = _start_http(cli, port, spec=ts)
+    _connect_pipeline(cli, tx_pipe)
+    _connect_pipeline(cli, rx_pipe)
 
-    if ts.flow_rate is None:
-        ts.flow_rate = ts.num_flows / ts.flow_duration
-
-    with cli.bess_lock:
-        cli.bess.pause_all()
-        f = FlowGen(template=DEFAULT_TEMPLATE, pps=ts.pps,
-                    flow_rate=ts.flow_rate, flow_duration=ts.flow_duration,
-                    arrival=ts.arrival, duration=ts.duration, quick_rampup=True)
-        qo = QueueOut(port=port, qid=0)
-        qi = QueueInc(port=port, name='qinc_%s' % (port,), qid=0)
-        sn = Sink()
-        cli.bess.connect_modules(f.name, qo.name)
-        cli.bess.connect_modules(qi.name, sn.name)
-        cli.bess.resume_all()
-
-    cli.add_session(Session(port, ts, [f, qo], [qi, sn]))
+    cli.add_session(Session(port, ts, tx_pipe, rx_pipe))
 
 
 @cmd('stop PORT...', 'Stop sending packets on a set of ports')
