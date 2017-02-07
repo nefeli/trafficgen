@@ -54,23 +54,6 @@ class TGENCLI(cli.CLI):
         self.__monitor_thread.join()
 
     def monitor_thread(self):
-        # Load module constructors
-        while True:
-            try:
-                with self.bess_lock:
-                    class_names = self.bess.list_mclasses().names
-                    for name in class_names:
-                        if name in generator_commands.mclasses:
-                            raise cli.InternalError(
-                                    'Invalid module class name: %s' % name)
-
-                        generator_commands.mclasses[name] = \
-                            type(str(name), (Module,), {'bess': self.bess,
-                                 'choose_arg': generator_commands._choose_arg})
-                break
-            except:
-                time.sleep(1)
-
         while not self._done():
             now = time.time()
             with self.__running_lock:

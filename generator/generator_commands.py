@@ -23,8 +23,6 @@ from module import *
 
 from common import *
 
-mclasses = dict()
-
 @staticmethod
 def _choose_arg(arg, kwargs):
     if kwargs:
@@ -41,6 +39,20 @@ def _choose_arg(arg, kwargs):
         return arg.name
     else:
         return arg
+
+
+def setup_mclasses(cli):
+    MCLASSES = [
+        'FlowGen',
+        'QueueInc',
+        'QueueOut',
+        'Sink',
+    ]
+    for name in MCLASSES:
+        if name in globals():
+            break
+        globals()[name] = type(str(name), (Module,), {'bess': cli.bess,
+                               'choose_arg': _choose_arg})
 
 
 def get_var_attrs(cli, var_token, partial_word):
@@ -230,35 +242,6 @@ tcp = scapy.TCP(sport=src_port, dport=12345, seq=12345)
 payload = "meow"
 DEFAULT_TEMPLATE = str(eth/ip/tcp/payload)
 
-def FlowGen(spec, quick_rampup=True, template=DEFAULT_TEMPLATE):
-    if spec.flow_rate is None:
-        spec.flow_rate = spec.num_flows / spec.flow_duration
-    arg = {
-        'template': template,
-        'pps': spec.pps,
-        'flow_rate': spec.flow_rate,
-        'flow_duration': spec.flow_duration,
-        'arrival': spec.arrival,
-        'duration': spec.duration,
-        'quick_rampup': quick_rampup,
-    }
-    return mclasses['FlowGen'](**arg)
-
-
-def QueueInc(port, name, qid=0):
-    arg = {'port': port, 'name': name, 'qid': qid}
-    return mclasses['QueueInc'](**arg)
-
-
-def QueueOut(port, qid=0):
-    arg = {'port': port, 'qid': qid}
-    return mclasses['QueueOut'](**arg)
-
-
-def Sink():
-    return mclasses['Sink']()
-
-
 """
 TRAFFIC_SPEC:
     loss_rate -- target percentage of packet loss (default 0.0)
@@ -272,6 +255,7 @@ TRAFFIC_SPEC:
 """
 @cmd('start PORT [TRAFFIC_SPEC...]', 'Start sending packets on a port')
 def start(cli, port, spec):
+    setup_mclasses(cli)
     if cli.port_is_running(port):
         return cli.CommandError("Port %s is already running" % (port,))
 
@@ -281,13 +265,19 @@ def start(cli, port, spec):
     else:
         ts = TrafficSpec()
 
+    if ts.flow_rate is None:
+        ts.flow_rate = ts.num_flows / ts.flow_duration
+
     with cli.bess_lock:
         cli.bess.pause_all()
-        f = FlowGen(ts)
-        qo = QueueOut(port)
-        qi = QueueInc(port, 'qinc_%s' % (port,))
+        f = FlowGen(template=DEFAULT_TEMPLATE, pps=ts.pps,
+                    flow_rate=ts.flow_rate, flow_duration=ts.flow_duration,
+                    arrival=ts.arrival, duration=ts.duration, quick_rampup=True)
+        qo = QueueOut(port=port, qid=0)
+        qi = QueueInc(port=port, name='qinc_%s' % (port,), qid=0)
         sn = Sink()
         cli.bess.connect_modules(f.name, qo.name)
+        cli.bess.connect_modules(qi.name, sn.name)
         cli.bess.resume_all()
 
     cli.add_session(Session(port, ts, [f, qo], [qi, sn]))
@@ -295,6 +285,7 @@ def start(cli, port, spec):
 
 @cmd('stop PORT...', 'Stop sending packets on a set of ports')
 def stop(cli, ports):
+    setup_mclasses(cli)
     for port in ports:
         sess = cli.remove_session(port)
         with cli.bess_lock:
