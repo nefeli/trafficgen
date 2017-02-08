@@ -23,10 +23,11 @@ def sleep_us(dur):
 
 
 class TrafficSpec(object):
-    def __init__(self, loss_rate=None, latency=False, pps=None):
+    def __init__(self, loss_rate=None, latency=False, pps=None, cores='0'):
         self.loss_rate = loss_rate
         self.latency = latency
         self.pps = pps
+        self.cores = list(map(int, cores.split(' ')))
 
 
 class UdpSpec(TrafficSpec):
@@ -51,7 +52,7 @@ class HttpSpec(TrafficSpec):
 
 
 class FlowGenSpec(TrafficSpec):
-    def __init__(self, pps=1e6, pkt_size=60, num_flows=10,
+    def __init__(self, pkt_size=60, num_flows=10,
                  flow_duration=1, flow_rate=None, arrival='uniform',
                  duration='uniform', **kwargs):
         self.pkt_size = pkt_size
@@ -64,8 +65,7 @@ class FlowGenSpec(TrafficSpec):
 
 
 class Session(object):
-    # TODO: need support for multiple cores
-    def __init__(self, port, spec, tx_pipeline, rx_pipeline):
+    def __init__(self, port, spec, tx_pipelines, rx_pipelines):
         now = time.time()
         self.__spec = spec
         self.__port = port
@@ -73,8 +73,13 @@ class Session(object):
         self.__last_stats = None
         self.__now = now
         self.__last_check = now
-        self.__tx_pipeline = tx_pipeline
-        self.__rx_pipeline = rx_pipeline
+        """
+        __tx_pipelines and __rx_pipelines map cores to pipelines
+        e.g., __tx_pipelines might look like {0: [FlowGen(), Sink()]}
+        for a simple flowgen pipeline
+        """
+        self.__tx_pipelines = tx_pipelines
+        self.__rx_pipelines = rx_pipelines
         self.__current_pps = spec.pps
 
     def port(self):
@@ -110,9 +115,11 @@ class Session(object):
             self.__current_pps /= 2
         elif pps > thresh:
             self.__current_pps *= ADJUST_FACTOR
-        src = self.__tx_pipeline[0]
-        if src.mclass == 'FlowGen': # TODO: generalize this
-            src.update(pps=self.__current_pps)
+        num_cores = len(self.__tx_pipelines.keys())
+        for core, tx_pipeline in self.__tx_pipelines.items():
+            src = tx_pipeline[0]
+            if src.mclass == 'FlowGen': # TODO: generalize this
+                src.update(pps=self.__current_pps / num_cores)
 
     def update_stats(self, cli, now=None):
         if self.__last_stats is not None:

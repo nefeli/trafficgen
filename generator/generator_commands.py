@@ -282,21 +282,25 @@ def _start_flowgen(cli, port, spec):
     if spec.flow_rate is None:
         spec.flow_rate = spec.num_flows / spec.flow_duration
 
-    with cli.bess_lock:
-        cli.bess.pause_all()
-        f = FlowGen(template=DEFAULT_TEMPLATE, pps=spec.pps,
-                    flow_rate=spec.flow_rate, flow_duration=spec.flow_duration,
+    tx_pipes = dict()
+    rx_pipes = dict()
+
+    flows_per_core = spec.num_flows / len(spec.cores)
+    pps_per_core = spec.pps / len(spec.cores)
+    cli.bess.pause_all()
+    for i, core in enumerate(spec.cores):
+        cli.bess.add_worker(wid=core, core=core)
+        src = FlowGen(template=DEFAULT_TEMPLATE, pps=pps_per_core,
+                    flow_rate=flows_per_core, flow_duration=spec.flow_duration,
                     arrival=spec.arrival, duration=spec.duration,
                     quick_rampup=True)
-        qo = QueueOut(port=port, qid=0)
-        tx_pipe = [f, qo]
+        cli.bess.attach_task(src.name, 0, wid=core)
+        tx_pipes[core] = [src, QueueOut(port=port, qid=i)]
 
-        qi = QueueInc(port=port, name='qinc_%s' % (port,), qid=0)
-        sn = Sink()
-        rx_pipe = [qi, sn]
-        cli.bess.resume_all()
+        rx_pipes[core] = [QueueInc(port=port, qid=i), Sink()]
+    cli.bess.resume_all()
 
-    return (tx_pipe, rx_pipe)
+    return (tx_pipes, rx_pipes)
 
 
 def _build_pkt(size):
@@ -335,24 +339,29 @@ def _start_udp(cli, port, spec):
 
     num_flows = spec.num_flows
 
-    rx_pipe = []
-    with cli.bess_lock:
-        cli.bess.pause_all()
-        tx_pipe = [
-            Source(),
+    tx_pipes = dict()
+    rx_pipes = dict()
+
+    cli.bess.pause_all()
+    for i, core in enumerate(spec.cores):
+        cli.bess.add_worker(wid=core, core=core)
+        src = Source()
+        cli.bess.attach_task(src.name, 0, wid=core)
+        tx_pipes[core] = [
+            src,
             Rewrite(templates=pkt_templates),
             RandomUpdate(fields=[{'offset': 30,
                                    'size': 4,
                                    'min': 0x0a000001,
                                    'max': 0x0a000001 + num_flows - 1}]),
             IPChecksum(),
-            QueueOut(port=port, qid=0)
+            QueueOut(port=port, qid=i)
         ]
 
-        rx_pipe =[QueueInc(port=port, qid=0), Sink()]
-        cli.bess.resume_all()
+        rx_pipes[core] = [QueueInc(port=port, qid=i), Sink()]
+    cli.bess.resume_all()
 
-    return (tx_pipe, rx_pipe)
+    return (tx_pipes, rx_pipes)
 
 
 """
@@ -363,6 +372,7 @@ TRAFFIC_SPEC:
     src_ip -- start of source ip range
     dst_ip -- start of destination ip range
     src_port -- port to send http requests from
+    cores -- a list of cores to use (defualt: "0")
 """
 def _start_http(cli, port, spec):
     SEQNO = 12345
@@ -376,22 +386,34 @@ def _start_http(cli, port, spec):
     pkt_headers = eth/ip/tcp
     pkt_template = str(eth/ip/tcp/payload)
 
-    tx_pipe = [
-        FlowGen(template=pkt_template, pps=10e6, flow_rate = spec.num_flows,
-                flow_duration = 5, arrival='uniform', duration='uniform',
-                quick_rampup=False),
-        RandomUpdate(fields=[{'offset': len(pkt_headers)  + len(payload_prefix),
-                     'size': 1, 'min': 97, 'max': 122}]),
-        RandomUpdate(fields=[{'offset': len(pkt_headers)  + \
-                                        len(payload_prefix) + 1,
-                              'size': 1, 'min': 97, 'max': 122}]),
-        IPChecksum(),
-        QueueOut(port=port, qid=0)
-    ]
+    tx_pipes = dict()
+    rx_pipes = dict()
 
-    rx_pipe = [QueueInc(port=port, qid=0), Sink()]
+    flows_per_core = spec.num_flows / len(spec.cores)
+    pps_per_core = spec.pps / len(spec.cores)
+    cli.bess.pause_all()
+    for i, core in enumerate(spec.cores):
+        cli.bess.add_worker(wid=core, core=core)
 
-    return (tx_pipe, rx_pipe)
+        src = FlowGen(template=pkt_template, pps=pps_per_core,
+                     flow_rate=flows_per_core, flow_duration=5,
+                     arrival='uniform', duration='uniform', quick_rampup=False)
+        cli.bess.attach_task(src.name, 0, wid=core)
+        tx_pipes[core] = [
+            src,
+            RandomUpdate(fields=[{'offset': len(pkt_headers)  + len(payload_prefix),
+                         'size': 1, 'min': 97, 'max': 122}]),
+            RandomUpdate(fields=[{'offset': len(pkt_headers)  + \
+                                            len(payload_prefix) + 1,
+                                  'size': 1, 'min': 97, 'max': 122}]),
+            IPChecksum(),
+            QueueOut(port=port, qid=i)
+        ]
+
+        rx_pipes[core] = [QueueInc(port=port, qid=i), Sink()]
+    cli.bess.resume_all()
+
+    return (tx_pipes, rx_pipes)
 
 
 @cmd('start PORT MODE [TRAFFIC_SPEC...]', 'Start sending packets on a port')
@@ -405,23 +427,27 @@ def start(cli, port, mode, spec):
             ts = FlowGenSpec(**spec)
         else:
             ts = FlowGenSpec()
-        tx_pipe, rx_pipe = _start_flowgen(cli, port, spec=ts)
+        tx_pipes, rx_pipes = _start_flowgen(cli, port, spec=ts)
     elif mode == 'udp':
         if spec is not None:
             ts = UdpSpec(**spec)
         else:
             ts = UdpSpec()
-        tx_pipe, rx_pipe = _start_udp(cli, port, spec=ts)
+        tx_pipes, rx_pipes = _start_udp(cli, port, spec=ts)
     elif mode == 'http':
         if spec is not None:
             ts = HttpSpec(**spec)
         else:
             ts = HttpSpec()
-        tx_pipe, rx_pipe = _start_http(cli, port, spec=ts)
-    _connect_pipeline(cli, tx_pipe)
-    _connect_pipeline(cli, rx_pipe)
+        tx_pipes, rx_pipes = _start_http(cli, port, spec=ts)
 
-    cli.add_session(Session(port, ts, tx_pipe, rx_pipe))
+    for core, tx_pipe in tx_pipes.items():
+        _connect_pipeline(cli, tx_pipe)
+
+    for core, rx_pipe in rx_pipes.items():
+        _connect_pipeline(cli, rx_pipe)
+
+    cli.add_session(Session(port, ts, tx_pipes, rx_pipes))
 
 
 @cmd('stop PORT...', 'Stop sending packets on a set of ports')
