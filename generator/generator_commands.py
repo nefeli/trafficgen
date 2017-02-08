@@ -295,9 +295,9 @@ def _start_flowgen(cli, port, spec):
                     arrival=spec.arrival, duration=spec.duration,
                     quick_rampup=True)
         cli.bess.attach_task(src.name, 0, wid=core)
-        tx_pipes[core] = [src, QueueOut(port=port, qid=i)]
+        tx_pipes[core] = Pipeline([src, QueueOut(port=port, qid=i)])
 
-        rx_pipes[core] = [QueueInc(port=port, qid=i), Sink()]
+        rx_pipes[core] = Pipeline([QueueInc(port=port, qid=i), Sink()])
     cli.bess.resume_all()
 
     return (tx_pipes, rx_pipes)
@@ -343,11 +343,29 @@ def _start_udp(cli, port, spec):
     rx_pipes = dict()
 
     cli.bess.pause_all()
+
+    num_cores = len(spec.cores)
+    if spec.pps is not None:
+        pps_per_core = long(spec.pps / num_cores)
+
     for i, core in enumerate(spec.cores):
         cli.bess.add_worker(wid=core, core=core)
         src = Source()
-        cli.bess.attach_task(src.name, 0, wid=core)
-        tx_pipes[core] = [
+        if spec.pps is not None:
+            rr_name = 'rr_w%d' % (core,)
+            rl_name = 'rl_pps_w%d' % (core,)
+            leaf_name = 'bit_leaf_w%d' % (core,)
+            cli.bess.add_tc(rr_name, wid=core, policy='round_robin', priority=0)
+            cli.bess.add_tc(rl_name, parent=rr_name, policy='rate_limit',
+                            resource='packet', limit={'packet': pps_per_core})
+            cli.bess.add_tc(leaf_name, policy='leaf', parent=rl_name)
+            cli.bess.attach_task(src.name, tc=leaf_name)
+        else:
+            rr_name = None
+            rl_name = None
+            leaf_name = None
+            cli.bess.attach_task(src.name, 0, wid=core)
+        tx_pipes[core] = Pipeline([
             src,
             Rewrite(templates=pkt_templates),
             RandomUpdate(fields=[{'offset': 30,
@@ -356,9 +374,9 @@ def _start_udp(cli, port, spec):
                                    'max': 0x0a000001 + num_flows - 1}]),
             IPChecksum(),
             QueueOut(port=port, qid=i)
-        ]
+        ], rl_name)
 
-        rx_pipes[core] = [QueueInc(port=port, qid=i), Sink()]
+        rx_pipes[core] = Pipeline([QueueInc(port=port, qid=i), Sink()])
     cli.bess.resume_all()
 
     return (tx_pipes, rx_pipes)
@@ -399,7 +417,7 @@ def _start_http(cli, port, spec):
                      flow_rate=flows_per_core, flow_duration=5,
                      arrival='uniform', duration='uniform', quick_rampup=False)
         cli.bess.attach_task(src.name, 0, wid=core)
-        tx_pipes[core] = [
+        tx_pipes[core] = Pipeline([
             src,
             RandomUpdate(fields=[{'offset': len(pkt_headers)  + len(payload_prefix),
                          'size': 1, 'min': 97, 'max': 122}]),
@@ -408,9 +426,9 @@ def _start_http(cli, port, spec):
                                   'size': 1, 'min': 97, 'max': 122}]),
             IPChecksum(),
             QueueOut(port=port, qid=i)
-        ]
+        ])
 
-        rx_pipes[core] = [QueueInc(port=port, qid=i), Sink()]
+        rx_pipes[core] = Pipeline([QueueInc(port=port, qid=i), Sink()])
     cli.bess.resume_all()
 
     return (tx_pipes, rx_pipes)
@@ -442,10 +460,10 @@ def start(cli, port, mode, spec):
         tx_pipes, rx_pipes = _start_http(cli, port, spec=ts)
 
     for core, tx_pipe in tx_pipes.items():
-        _connect_pipeline(cli, tx_pipe)
+        _connect_pipeline(cli, tx_pipe.modules)
 
     for core, rx_pipe in rx_pipes.items():
-        _connect_pipeline(cli, rx_pipe)
+        _connect_pipeline(cli, rx_pipe.modules)
 
     cli.add_session(Session(port, ts, tx_pipes, rx_pipes))
 

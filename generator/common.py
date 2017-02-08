@@ -22,6 +22,11 @@ def sleep_us(dur):
     time.sleep(dur / 1e6)
 
 
+class Pipeline(object):
+    def __init__(self, modules, tc=None):
+        self.modules = modules
+        self.tc = tc
+
 class TrafficSpec(object):
     def __init__(self, loss_rate=None, latency=False, pps=None, cores='0'):
         self.loss_rate = loss_rate
@@ -74,8 +79,8 @@ class Session(object):
         self.__now = now
         self.__last_check = now
         """
-        __tx_pipelines and __rx_pipelines map cores to pipelines
-        e.g., __tx_pipelines might look like {0: [FlowGen(), Sink()]}
+        `__tx_pipelines` and `__rx_pipelines` map cores to pipelines e.g.,
+        `__tx_pipelines` might look like  {0: Pipeline([FlowGen(), Sink()])}
         for a simple flowgen pipeline
         """
         self.__tx_pipelines = tx_pipelines
@@ -100,7 +105,7 @@ class Session(object):
     def last_check(self):
         return self.__last_chck
 
-    def adjust_tx_rate(self):
+    def adjust_tx_rate(self, cli):
         if self.__spec.loss_rate is None or self.__spec.pps is None:
             return
 
@@ -115,11 +120,16 @@ class Session(object):
             self.__current_pps /= 2
         elif pps > thresh:
             self.__current_pps *= ADJUST_FACTOR
+
         num_cores = len(self.__tx_pipelines.keys())
+        pps_per_core = self.__current_pps / num_cores
         for core, tx_pipeline in self.__tx_pipelines.items():
-            src = tx_pipeline[0]
-            if src.mclass == 'FlowGen': # TODO: generalize this
-                src.update(pps=self.__current_pps / num_cores)
+            tc = tx_pipeline.tc 
+            if tc is None:
+                tx_pipeline.modules[0].update(pps=pps_per_core)
+            else:
+                cli.bess.update_tc(tc, resource='packet',
+                               limit={'packet': long(pps_per_core)})
 
     def update_stats(self, cli, now=None):
         if self.__last_stats is not None:

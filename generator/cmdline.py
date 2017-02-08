@@ -65,7 +65,7 @@ class TGENCLI(cli.CLI):
                         self.bess.pause_all()
                         try:
                             for port, sess in self.__running.items():
-                                sess.adjust_tx_rate()
+                                sess.adjust_tx_rate(self)
                         finally:
                             self.bess.resume_all()
                 except:
