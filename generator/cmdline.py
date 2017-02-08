@@ -43,6 +43,11 @@ class TGENCLI(cli.CLI):
             ret = self.__running.pop(port, None)
         return ret
 
+    def get_session(self, port):
+        with self.__running_lock:
+            ret = self.__running.get(port, None)
+        return ret
+
     def _done(self):
         with self.__done_lock:
             ret = self.__done
@@ -60,7 +65,10 @@ class TGENCLI(cli.CLI):
                 try:
                     with self.bess_lock:
                         for port, sess in self.__running.items():
-                            sess.update_stats(self, now)
+                            if sess.spec().latency:
+                                sess.update_rtt(self)
+                            else:
+                                sess.update_port_stats(self, now)
 
                         self.bess.pause_all()
                         try:

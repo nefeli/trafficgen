@@ -45,6 +45,8 @@ def setup_mclasses(cli):
     MCLASSES = [
         'FlowGen',
         'IPChecksum',
+        'Measure',
+        'Queue',
         'QueueInc',
         'QueueOut',
         'RandomUpdate',
@@ -52,6 +54,7 @@ def setup_mclasses(cli):
         'RoundRobin',
         'Source',
         'Sink',
+        'Timestamp',
         'Update',
     ]
     for name in MCLASSES:
@@ -222,7 +225,6 @@ def bind_var(cli, var_type, line):
 
 bessctl_cmds = [
     'monitor pipeline',
-    'monitor port',
     'daemon reset',
     'daemon start [BESSD_OPTS...]',
     'daemon stop',
@@ -245,6 +247,149 @@ def help(cli):
         cli.fout.write('  %-50s%s\n' % (syntax, desc))
 
 
+PortRate = collections.namedtuple('PortRate',
+                                  ['inc_packets', 'inc_dropped', 'inc_bytes',
+                                   'rtt_avg', 'rtt_med', 'rtt_99',
+                                   'out_packets', 'out_dropped', 'out_bytes'])
+
+def _monitor_ports(cli, *ports):
+
+    def get_delta(old, new):
+        sec_diff = new['timestamp'] - old['timestamp'] + 0.00000001
+        delta = PortRate(
+            inc_packets = (new['inc_packets'] - old['inc_packets']) / sec_diff,
+            inc_dropped = (new['inc_dropped'] - old['inc_dropped']) / sec_diff,
+            inc_bytes = (new['inc_bytes'] - old['inc_bytes']) / sec_diff,
+            rtt_avg = (new['avg'] - old['avg']) / sec_diff,
+            rtt_med = (new['med'] - old['med']) / sec_diff,
+            rtt_99 = (new['99'] - old['99']) / sec_diff,
+            out_packets = (new['out_packets'] - old['out_packets']) / sec_diff,
+            out_dropped = (new['out_dropped'] - old['out_dropped']) / sec_diff,
+            out_bytes = (new['out_bytes'] - old['out_bytes']) / sec_diff)
+        return delta
+
+    def print_header(timestamp):
+        cli.fout.write('\n')
+        cli.fout.write('%-20s%14s%10s%10s%10s%10s%10s       %14s%10s%10s\n' %
+                       (time.strftime('%X') + str(timestamp % 1)[1:8],
+                        'INC     Mbps', 'Mpps', 'dropped',
+                        'avg_rtt', 'med_rtt', '99_rtt',
+                        'OUT     Mbps', 'Mpps', 'dropped'))
+
+        cli.fout.write('%s\n' % ('-' * 126))
+
+    def print_footer():
+        cli.fout.write('%s\n' % ('-' * 126))
+
+    def print_delta(port, delta):
+        cli.fout.write('%-20s%14.1f%10.3f%10d%10.3f%10.3f%10.3f        %14.1f%10.3f%10d\n' %
+                       (port,
+                        (delta.inc_bytes + delta.inc_packets * 24) * 8 / 1e6,
+                        delta.inc_packets / 1e6,
+                        delta.inc_dropped,
+                        delta.rtt_avg,
+                        delta.rtt_med,
+                        delta.rtt_99,
+                        (delta.out_bytes + delta.out_packets * 24) * 8 / 1e6,
+                        delta.out_packets / 1e6,
+                        delta.out_dropped))
+
+    def get_total(arr):
+        total = copy.deepcopy(arr[0])
+        for stat in arr[1:]:
+            total['inc_packets'] += stat['inc_packets']
+            total['inc_dropped'] += stat['inc_dropped']
+            total['inc_bytes'] += stat['inc_bytes']
+            total['avg'] += stat['avg']
+            total['med'] += stat['med']
+            total['99'] += stat['99']
+            total['out_packets'] += stat['out_packets']
+            total['out_dropped'] += stat['out_dropped']
+            total['out_bytes'] += stat['out_bytes']
+        return total
+
+    def get_all_stats(cli, sess):
+        stats = cli.bess.get_port_stats(sess.port())
+        try:
+            ret = {
+                'inc_packets': stats.inc.packets,
+                'out_packets': stats.out.packets,
+                'inc_bytes': stats.inc.bytes,
+                'out_bytes': stats.out.bytes,
+                'inc_dropped': stats.inc.dropped,
+                'out_dropped': stats.out.dropped,
+            }
+        except:
+            raise
+            ret = {
+                'inc_packets': 0,
+                'out_packets': 0,
+                'inc_bytes': 0,
+                'out_bytes': 0,
+                'inc_dropped': 0,
+                'out_dropped': 0,
+            }
+        rtt_now = sess.curr_rtt()
+        if rtt_now is None:
+            rtt_now = {'avg': 0, 'med': 0, '99': 0, 'timestamp': 0}
+        ret.update(rtt_now)
+        return ret
+
+    all_ports = sorted(cli.bess.list_ports().ports, key=lambda x: x.name)
+    drivers = {}
+    for port in all_ports:
+        drivers[port.name] = port.driver
+
+    if not ports:
+        ports = [port.name for port in all_ports]
+        if not ports:
+            raise cli.CommandError('No port to monitor')
+
+    cli.fout.write('Monitoring ports: %s\n' % ', '.join(ports))
+
+    last = {}
+    now = {}
+
+    for port in ports:
+        last[port] = get_all_stats(cli, cli.get_session(port))
+
+    try:
+        while True:
+            time.sleep(1)
+
+            sess = cli.get_session(port)
+            for port in ports:
+                now[port] = get_all_stats(cli, sess)
+
+            print_header(now[port]['timestamp'])
+
+            for port in ports:
+                print_delta('%s/%s' % (port, drivers[port]),
+                            get_delta(last[port], now[port]))
+
+            print_footer()
+
+            if len(ports) > 1:
+                print_delta('Total', get_delta(
+                        get_total(last.values()),
+                        get_total(now.values())))
+
+            for port in ports:
+                last[port] = now[port]
+    except KeyboardInterrupt:
+        pass
+
+
+@cmd('monitor port', 'Monitor the current traffic of all ports')
+def monitor_port_all(cli):
+    _monitor_ports(cli)
+
+
+@cmd('monitor port PORT...', 'Monitor the current traffic of specified ports')
+def monitor_port_all(cli, ports):
+    _monitor_ports(cli, *ports)
+
+
 def _connect_pipeline(cli, pipe):
     with cli.bess_lock:
         cli.bess.pause_all()
@@ -254,6 +399,17 @@ def _connect_pipeline(cli, pipe):
                 v =  pipe[i + 1]
                 cli.bess.connect_modules(u.name, v.name)
         cli.bess.resume_all()
+
+
+def _create_rate_limit_tree(cli, wid, resource, limit):
+    rr_name = 'rr_w%d' % (wid,)
+    rl_name = 'rl_pps_w%d' % (wid,)
+    leaf_name = 'bit_leaf_w%d' % (wid,)
+    cli.bess.add_tc(rr_name, wid=wid, policy='round_robin', priority=0)
+    cli.bess.add_tc(rl_name, parent=rr_name, policy='rate_limit',
+                    resource=resource, limit={resource: limit})
+    cli.bess.add_tc(leaf_name, policy='leaf', parent=rl_name)
+    return (rr_name, rl_name, leaf_name)
 
 
 src_ether='02:1e:67:9f:4d:aa'
@@ -285,8 +441,12 @@ def _start_flowgen(cli, port, spec):
     tx_pipes = dict()
     rx_pipes = dict()
 
-    flows_per_core = spec.num_flows / len(spec.cores)
-    pps_per_core = spec.pps / len(spec.cores)
+    num_cores = len(spec.cores)
+    flows_per_core = spec.num_flows / num_cores
+    pps_per_core = spec.pps / num_cores
+    if spec.mbps is not None:
+        bps_per_core = long(1e6 * spec.mbps / num_cores)
+
     cli.bess.pause_all()
     for i, core in enumerate(spec.cores):
         cli.bess.add_worker(wid=core, core=core)
@@ -294,10 +454,28 @@ def _start_flowgen(cli, port, spec):
                     flow_rate=flows_per_core, flow_duration=spec.flow_duration,
                     arrival=spec.arrival, duration=spec.duration,
                     quick_rampup=True)
-        cli.bess.attach_task(src.name, 0, wid=core)
-        tx_pipes[core] = Pipeline([src, QueueOut(port=port, qid=i)])
+        if spec.latency:
+            rl_name, rr_name, leaf_name = _create_rate_limit_tree(cli,
+                                                                  core,
+                                                                  'bit',
+                                                                  bps_per_core)
+            cli.bess.attach_task(src.name, tc=leaf_name)
+        else:
+            cli.bess.attach_task(src.name, 0, wid=core)
 
-        rx_pipes[core] = Pipeline([QueueInc(port=port, qid=i), Sink()])
+        # Setup tx pipeline
+        tx_pipe = [src, Queue()]
+        if spec.latency:
+            tx_pipe.append(Timestamp())
+        tx_pipe.append(QueueOut(port=port, qid=i))
+        tx_pipes[core] = Pipeline(tx_pipe)
+
+        # Setup rx pipeline
+        rx_pipe = [QueueInc(port=port, qid=i)]
+        if spec.latency:
+            rx_pipe.append(Measure())
+        rx_pipe.append(Sink())
+        rx_pipes[core] = Pipeline(rx_pipe)
     cli.bess.resume_all()
 
     return (tx_pipes, rx_pipes)
@@ -345,27 +523,34 @@ def _start_udp(cli, port, spec):
     cli.bess.pause_all()
 
     num_cores = len(spec.cores)
-    if spec.pps is not None:
+    if spec.mbps is not None:
+        bps_per_core = long(1e6 * spec.mbps / num_cores)
+    elif spec.pps is not None:
         pps_per_core = long(spec.pps / num_cores)
 
     for i, core in enumerate(spec.cores):
         cli.bess.add_worker(wid=core, core=core)
         src = Source()
-        if spec.pps is not None:
-            rr_name = 'rr_w%d' % (core,)
-            rl_name = 'rl_pps_w%d' % (core,)
-            leaf_name = 'bit_leaf_w%d' % (core,)
-            cli.bess.add_tc(rr_name, wid=core, policy='round_robin', priority=0)
-            cli.bess.add_tc(rl_name, parent=rr_name, policy='rate_limit',
-                            resource='packet', limit={'packet': pps_per_core})
-            cli.bess.add_tc(leaf_name, policy='leaf', parent=rl_name)
+        if spec.mbps is not None:
+            rl_name, rr_name, leaf_name = _create_rate_limit_tree(cli,
+                                                                  core,
+                                                                  'bit',
+                                                                  bps_per_core)
+            cli.bess.attach_task(src.name, tc=leaf_name)
+        elif spec.pps is not None:
+            rl_name, rr_name, leaf_name = _create_rate_limit_tree(cli,
+                                                                  core,
+                                                                  'packet',
+                                                                  pps_per_core)
             cli.bess.attach_task(src.name, tc=leaf_name)
         else:
             rr_name = None
             rl_name = None
             leaf_name = None
             cli.bess.attach_task(src.name, 0, wid=core)
-        tx_pipes[core] = Pipeline([
+
+        # Setup tx pipeline
+        tx_pipe = [
             src,
             Rewrite(templates=pkt_templates),
             RandomUpdate(fields=[{'offset': 30,
@@ -373,10 +558,20 @@ def _start_udp(cli, port, spec):
                                    'min': 0x0a000001,
                                    'max': 0x0a000001 + num_flows - 1}]),
             IPChecksum(),
-            QueueOut(port=port, qid=i)
-        ], rl_name)
+            Queue()
+        ]
+        if spec.latency:
+            tx_pipe.append(Timestamp())
+        tx_pipe.append(QueueOut(port=port, qid=i))
+        tx_pipes[core] = Pipeline(tx_pipe, rl_name)
 
-        rx_pipes[core] = Pipeline([QueueInc(port=port, qid=i), Sink()])
+        # Setup rx pipeline
+        rx_pipe = [QueueInc(port=port, qid=i)]
+        if spec.latency:
+            rx_pipe.append(Measure())
+        rx_pipe.append(Sink())
+        rx_pipes[core] = Pipeline(rx_pipe)
+
     cli.bess.resume_all()
 
     return (tx_pipes, rx_pipes)
@@ -407,8 +602,12 @@ def _start_http(cli, port, spec):
     tx_pipes = dict()
     rx_pipes = dict()
 
-    flows_per_core = spec.num_flows / len(spec.cores)
-    pps_per_core = spec.pps / len(spec.cores)
+    num_cores = len(spec.cores)
+    flows_per_core = spec.num_flows / num_cores
+    pps_per_core = spec.pps / num_cores
+    if spec.mbps is not None:
+        bps_per_core = long(1e6 * spec.mbps / num_cores)
+
     cli.bess.pause_all()
     for i, core in enumerate(spec.cores):
         cli.bess.add_worker(wid=core, core=core)
@@ -416,8 +615,17 @@ def _start_http(cli, port, spec):
         src = FlowGen(template=pkt_template, pps=pps_per_core,
                      flow_rate=flows_per_core, flow_duration=5,
                      arrival='uniform', duration='uniform', quick_rampup=False)
-        cli.bess.attach_task(src.name, 0, wid=core)
-        tx_pipes[core] = Pipeline([
+        if spec.latency:
+            rl_name, rr_name, leaf_name = _create_rate_limit_tree(cli,
+                                                                  core,
+                                                                  'bit',
+                                                                  bps_per_core)
+            cli.bess.attach_task(src.name, tc=leaf_name)
+        else:
+            cli.bess.attach_task(src.name, 0, wid=core)
+
+        # Setup tx pipeline
+        tx_pipe = [
             src,
             RandomUpdate(fields=[{'offset': len(pkt_headers)  + len(payload_prefix),
                          'size': 1, 'min': 97, 'max': 122}]),
@@ -425,10 +633,19 @@ def _start_http(cli, port, spec):
                                             len(payload_prefix) + 1,
                                   'size': 1, 'min': 97, 'max': 122}]),
             IPChecksum(),
-            QueueOut(port=port, qid=i)
-        ])
+            Queue()
+        ]
+        if spec.latency:
+            tx_pipe.append(Timestamp())
+        tx_pipe.append(QueueOut(port=port, qid=i))
+        tx_pipes[core] = Pipeline(tx_pipe)
 
-        rx_pipes[core] = Pipeline([QueueInc(port=port, qid=i), Sink()])
+        # Setup rx pipeline
+        rx_pipe = [QueueInc(port=port, qid=i)]
+        if spec.latency:
+            rx_pipe.append(Measure())
+        rx_pipe.append(Sink())
+        rx_pipes[core] = Pipeline(rx_pipe)
     cli.bess.resume_all()
 
     return (tx_pipes, rx_pipes)

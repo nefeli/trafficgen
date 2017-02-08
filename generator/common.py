@@ -27,11 +27,16 @@ class Pipeline(object):
         self.modules = modules
         self.tc = tc
 
+
 class TrafficSpec(object):
-    def __init__(self, loss_rate=None, latency=False, pps=None, cores='0'):
+    def __init__(self, loss_rate=None, latency=False, pps=None, mbps=None,
+                 cores='0'):
         self.loss_rate = loss_rate
         self.latency = latency
         self.pps = pps
+        self.mbps = None
+        if latency:
+            self.mbps = 100
         self.cores = list(map(int, cores.split(' ')))
 
 
@@ -76,6 +81,12 @@ class Session(object):
         self.__port = port
         self.__curr_stats = None
         self.__last_stats = None
+        """
+        `__last_rtt` and `__curr_rtt` store the average of the rtt measurements
+        from each worker associated to this session. 
+        """
+        self.__last_rtt = None
+        self.__curr_rtt = None
         self.__now = now
         self.__last_check = now
         """
@@ -101,6 +112,15 @@ class Session(object):
 
     def last_stats(self):
         return self.__last_stats
+
+    def curr_stats(self):
+        return self.__curr_stats
+
+    def last_rtt(self):
+        return self.__last_rtt
+
+    def curr_rtt(self):
+        return self.__curr_rtt
 
     def last_check(self):
         return self.__last_chck
@@ -131,7 +151,7 @@ class Session(object):
                 cli.bess.update_tc(tc, resource='packet',
                                limit={'packet': long(pps_per_core)})
 
-    def update_stats(self, cli, now=None):
+    def update_port_stats(self, cli, now=None):
         if self.__last_stats is not None:
             self.__last_stats = self.__curr_stats
         self.__curr_stats = cli.bess.get_port_stats(self.__port)
@@ -139,3 +159,27 @@ class Session(object):
             self.__last_stats = self.__curr_stats
         self.__last_check = self.__now
         self.__now = now if now is not None else now()
+
+    def _get_rtt(self):
+        stats = {'avg': 0, 'med': 0, '99': 0, 'timestamp': 0}
+        for core, rx_pipeline in self.__rx_pipelines.items():
+            now = rx_pipeline.modules[1].get_summary()
+            stats['avg'] += now.total_latency_ns
+            stats['med'] += now.latency_50_ns
+            stats['99'] += now.latency_99_ns
+            stats['timestamp'] = now.timestamp
+        for k in stats:
+            if k == 'timestamp': continue
+            stats[k] /= len(self.__rx_pipelines.keys())
+            stats[k] /= 1e3 # convert to us
+        return stats
+
+    def update_rtt(self, cli):
+        if self.__last_rtt is not None:
+            self.__last_rtt = self.__curr_rtt
+        cli.bess.pause_all()
+        self.__curr_rtt = self._get_rtt()
+        cli.bess.resume_all()
+        if self.__last_rtt is None:
+            self.__last_rtt = self.__curr_rtt
+        self.__last_check = self.__now
