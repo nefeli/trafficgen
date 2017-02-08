@@ -164,7 +164,7 @@ class Session(object):
         stats = {'avg': 0, 'med': 0, '99': 0, 'timestamp': 0}
         for core, rx_pipeline in self.__rx_pipelines.items():
             now = rx_pipeline.modules[1].get_summary()
-            stats['avg'] += now.total_latency_ns
+            stats['avg'] += now.latency_avg_ns
             stats['med'] += now.latency_50_ns
             stats['99'] += now.latency_99_ns
             stats['timestamp'] = now.timestamp

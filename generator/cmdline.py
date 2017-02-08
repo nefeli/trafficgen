@@ -48,6 +48,10 @@ class TGENCLI(cli.CLI):
             ret = self.__running.get(port, None)
         return ret
 
+    def clear_sessions(self):
+        with self.__running_lock:
+            self.__running.clear()
+
     def _done(self):
         with self.__done_lock:
             ret = self.__done
@@ -73,11 +77,14 @@ class TGENCLI(cli.CLI):
                         self.bess.pause_all()
                         try:
                             for port, sess in self.__running.items():
-                                sess.adjust_tx_rate(self)
+                                if not sess.spec().latency:
+                                    sess.adjust_tx_rate(self)
                         finally:
                             self.bess.resume_all()
-                except:
+                except bess.BESS.APIError:
                     pass
+                except:
+                    raise
             sleep_us(ADJUST_WINDOW_US)
         print('Port monitor thread exiting...')
 

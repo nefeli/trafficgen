@@ -225,9 +225,7 @@ def bind_var(cli, var_type, line):
 
 bessctl_cmds = [
     'monitor pipeline',
-    'daemon reset',
     'daemon start [BESSD_OPTS...]',
-    'daemon stop',
     'daemon connect',
     'daemon disconnect',
     'add port DRIVER [NEW_PORT] [PORT_ARGS...]',
@@ -247,6 +245,21 @@ def help(cli):
         cli.fout.write('  %-50s%s\n' % (syntax, desc))
 
 
+@cmd('reset', 'Reset trafficgen')
+def reset(cli):
+    cli.clear_sessions()
+    with cli.bess_lock:
+        cli.bess.pause_all()
+        cli.bess.reset_all()
+        cli.bess.resume_all()
+
+@cmd('daemon stop', 'Stop bess daemon')
+def deamon_stop(cli):
+    cli.clear_sessions()
+    with cli.bess_lock:
+        cli.bess.pause_all()
+        cli.bess.kill()
+
 PortRate = collections.namedtuple('PortRate',
                                   ['inc_packets', 'inc_dropped', 'inc_bytes',
                                    'rtt_avg', 'rtt_med', 'rtt_99',
@@ -255,18 +268,17 @@ PortRate = collections.namedtuple('PortRate',
 def _monitor_ports(cli, *ports):
 
     def get_delta(old, new):
-        sec_diff = new['timestamp'] - old['timestamp'] + 0.00000001
-        delta = PortRate(
+        sec_diff = new['timestamp'] - old['timestamp']
+        return PortRate(
             inc_packets = (new['inc_packets'] - old['inc_packets']) / sec_diff,
             inc_dropped = (new['inc_dropped'] - old['inc_dropped']) / sec_diff,
             inc_bytes = (new['inc_bytes'] - old['inc_bytes']) / sec_diff,
-            rtt_avg = (new['avg'] - old['avg']) / sec_diff,
-            rtt_med = (new['med'] - old['med']) / sec_diff,
-            rtt_99 = (new['99'] - old['99']) / sec_diff,
+            rtt_avg = (new['avg'] + old['avg']) / 2,
+            rtt_med = (new['med'] + old['med']) / 2,
+            rtt_99 = (new['99'] + old['99']) / 2,
             out_packets = (new['out_packets'] - old['out_packets']) / sec_diff,
             out_dropped = (new['out_dropped'] - old['out_dropped']) / sec_diff,
             out_bytes = (new['out_bytes'] - old['out_bytes']) / sec_diff)
-        return delta
 
     def print_header(timestamp):
         cli.fout.write('\n')
@@ -320,7 +332,6 @@ def _monitor_ports(cli, *ports):
                 'out_dropped': stats.out.dropped,
             }
         except:
-            raise
             ret = {
                 'inc_packets': 0,
                 'out_packets': 0,
@@ -331,7 +342,7 @@ def _monitor_ports(cli, *ports):
             }
         rtt_now = sess.curr_rtt()
         if rtt_now is None:
-            rtt_now = {'avg': 0, 'med': 0, '99': 0, 'timestamp': 0}
+            rtt_now = {'avg': 0, 'med': 0, '99': 0, 'timestamp': stats.timestamp}
         ret.update(rtt_now)
         return ret
 
@@ -604,7 +615,11 @@ def _start_http(cli, port, spec):
 
     num_cores = len(spec.cores)
     flows_per_core = spec.num_flows / num_cores
-    pps_per_core = spec.pps / num_cores
+    if spec.pps is not None:
+        pps_per_core = spec.pps / num_cores
+    else:
+        pps_per_core = 5e6
+
     if spec.mbps is not None:
         bps_per_core = long(1e6 * spec.mbps / num_cores)
 
