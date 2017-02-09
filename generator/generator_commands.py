@@ -413,14 +413,9 @@ TRAFFIC_SPEC:
     duration -- distribution of flow durations (either 'uniform' or 'pareto')
 """
 def _start_flowgen(cli, port, spec):
-    src_ether='02:1e:67:9f:4d:aa'
-    dst_ether='02:1e:67:9f:4d:bb'
-    eth = scapy.Ether(src=src_ether, dst=dst_ether)
-    src_ip='10.0.0.1'
-    dst_ip='192.0.0.1'
-    ip = scapy.IP(src=src_ip, dst=dst_ip)
-    src_port = 10001
-    tcp = scapy.TCP(sport=src_port, dport=12345, seq=12345)
+    eth = scapy.Ether(src=spec.src_mac, dst=spec.dst_mac)
+    ip = scapy.IP(src=spec.src_ip, dst=spec.dst_ip)
+    tcp = scapy.TCP(sport=spec.src_port, dport=12345, seq=12345)
     payload = "meow"
     DEFAULT_TEMPLATE = str(eth/ip/tcp/payload)
 
@@ -475,13 +470,12 @@ def _start_flowgen(cli, port, spec):
     return (tx_pipes, rx_pipes)
 
 
-def _build_pkt(size):
-    eth = scapy.Ether(src='02:1e:67:9f:4d:ae', dst='06:16:3e:1b:72:32')
-    ip = scapy.IP(src='192.168.0.1', dst='10.0.0.1')
+def _build_pkt(spec, size):
+    eth = scapy.Ether(src=spec.src_mac, dst=spec.dst_mac)
+    ip = scapy.IP(src=spec.src_ip, dst=spec.dst_ip)
     udp = scapy.UDP(sport=10001, dport=10002, chksum=0)
     payload = ('hello' + '0123456789' * 200)[:size-len(eth/ip/udp)]
     pkt = eth/ip/udp/payload
-    pkt.show()
     return str(pkt)
 
 """
@@ -494,20 +488,20 @@ TRAFFIC_SPEC:
 def _start_udp(cli, port, spec):
     if spec.imix:
         pkt_templates = [
-            _build_pkt(60),
-            _build_pkt(60),
-            _build_pkt(60),
-            _build_pkt(60),
-            _build_pkt(60),
-            _build_pkt(60),
-            _build_pkt(60),
-            _build_pkt(590),
-            _build_pkt(590),
-            _build_pkt(590),
-            _build_pkt(1514)
+            _build_pkt(spec, 60),
+            _build_pkt(spec, 60),
+            _build_pkt(spec, 60),
+            _build_pkt(spec, 60),
+            _build_pkt(spec, 60),
+            _build_pkt(spec, 60),
+            _build_pkt(spec, 60),
+            _build_pkt(spec, 590),
+            _build_pkt(spec, 590),
+            _build_pkt(spec, 590),
+            _build_pkt(spec, 1514)
         ]
     else:
-        pkt_templates = [_build_pkt(spec.pkt_size)]
+        pkt_templates = [_build_pkt(spec, spec.pkt_size)]
 
     num_flows = spec.num_flows
 
@@ -672,12 +666,16 @@ def start(cli, port, mode, spec):
         cores = spec['cores'].split(' ')
     else:
         cores = [0]
+
     num_cores = len(cores)
     port_args = _create_port_args(cli, port, num_cores)
     with cli.bess_lock:
         ret = cli.bess.create_port(port_args['driver'], port_args['name'],
                                    arg=port_args['arg'])
         port = ret.name
+
+    if spec is not None and 'src_mac' not in spec:
+        spec['src_mac'] = ret.mac_addr
 
     if cli.port_is_running(port):
         raise cli.CommandError("Port %s is already running" % (port,))
@@ -686,19 +684,19 @@ def start(cli, port, mode, spec):
         if spec is not None:
             ts = FlowGenSpec(**spec)
         else:
-            ts = FlowGenSpec()
+            ts = FlowGenSpec(src_mac=ret.mac_addr)
         tx_pipes, rx_pipes = _start_flowgen(cli, port, spec=ts)
     elif mode == 'udp':
         if spec is not None:
             ts = UdpSpec(**spec)
         else:
-            ts = UdpSpec()
+            ts = UdpSpec(src_mac=ret.mac_addr)
         tx_pipes, rx_pipes = _start_udp(cli, port, spec=ts)
     elif mode == 'http':
         if spec is not None:
             ts = HttpSpec(**spec)
         else:
-            ts = HttpSpec()
+            ts = HttpSpec(src_mac=ret.mac_addr)
         tx_pipes, rx_pipes = _start_http(cli, port, spec=ts)
 
     for core, tx_pipe in tx_pipes.items():

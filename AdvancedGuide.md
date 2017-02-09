@@ -64,9 +64,26 @@ and destination Ethernet addresses to `X` and `Y` respectively. By default
 `src_mac` is set to the Ethernet address of the sending port and `dst_port` is
 set to `02:1e:67:9f:4d:bb`.
 
+#### IP Addresses
+
+Setting `src_ip=X` and `dst_ip=Y` will result in trafficgen generating flows
+with source and destination IP addresses starting at `X` and `Y` respectively.
+By default `src_ip` and `dst_ip` are `192.168.0.1` and `10.0.0.1` respectively.
+
+
 ### UDP Options
 
 The following options are only applicable to ports sending in `udp` mode.
+
+#### Number of Flows
+
+Setting `num_flows=N` will result in trafficgen sending `N` flows. By default
+`num_flows` is set to `10`.
+
+#### Packet Size
+
+Setting `pkt_size=X` will result in trafficgen sending `X`-byte packets. By
+default `pkt_size` is set to `60`.
 
 #### IMIX
 
@@ -118,12 +135,6 @@ The following options are only applicable to ports sending in `http` mode.
 
 Setting `num_flows=N` will result in trafficgen sending `N` flows. By default
 `num_flows` is set to `4000`.
-
-#### IP Addresses
-
-Setting `src_ip=X` and `dst_ip=Y` will result in trafficgen generating flows
-with source and destination IP addresses starting at `X` and `Y` respectively.
-By default `src_ip` and `dst_ip` are `192.168.0.1` and `10.0.0.1` respectively.
 
 #### TCP Ports
 
