@@ -663,12 +663,12 @@ def _create_port_args(cli, port_id, num_cores):
 
 
 @cmd('start PORT MODE [TRAFFIC_SPEC...]', 'Start sending packets on a port')
-def start(cli, port, mode, spec=dict()):
+def start(cli, port, mode, spec):
     setup_mclasses(cli)
     if not isinstance(port, str):
         raise cli.CommandError('Port identifier must be a string')
 
-    if 'cores' in spec:
+    if spec is not None and 'cores' in spec:
         cores = spec['cores'].split(' ')
     else:
         cores = [0]
