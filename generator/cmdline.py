@@ -171,7 +171,8 @@ class TGENCLI(cli.CLI):
             super(TGENCLI, self).loop()
         finally:
             self._finish()
-        self.bess.disconnect()
+        print('Killing BESS...')
+        bess_commands._do_stop(self)
 
     def get_prompt(self):
         if self.bess.is_connected():
@@ -222,4 +223,8 @@ def run_cli():
 
     cli = TGENCLI(s, generator_commands, ferr=stderr, interactive=interactive,
                   history_file=hist_file)
+    print('Starting BESS...')
+    bess_commands._do_start(cli, '')
+    bess_commands.warn(cli, 'About to clear any existing BESS pipelines.',
+        bess_commands._do_reset)
     cli.loop()

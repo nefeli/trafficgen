@@ -211,9 +211,6 @@ def bind_var(cli, var_type, line):
 
 bessctl_cmds = [
     'monitor pipeline',
-    'daemon start [BESSD_OPTS...]',
-    'daemon connect',
-    'daemon disconnect',
 ]
 
 cmdlist = filter(lambda x: x[0] in bessctl_cmds, bess_commands.cmdlist)
@@ -230,20 +227,16 @@ def help(cli):
         cli.fout.write('  %-50s%s\n' % (syntax, desc))
 
 
-@cmd('reset', 'Reset trafficgen')
-def reset(cli):
+def _do_reset(cli):
     cli.clear_sessions()
     with cli.bess_lock:
         cli.bess.pause_all()
         cli.bess.reset_all()
         cli.bess.resume_all()
 
-@cmd('daemon stop', 'Stop bess daemon')
-def deamon_stop(cli):
-    cli.clear_sessions()
-    with cli.bess_lock:
-        cli.bess.pause_all()
-        cli.bess.kill()
+@cmd('reset', 'Reset trafficgen')
+def reset(cli):
+    bess_commands.warn(cli, 'Going to reset everything.', _do_reset)
 
 PortRate = collections.namedtuple('PortRate',
                                   ['inc_packets', 'inc_dropped', 'inc_bytes',
