@@ -46,7 +46,6 @@ def setup_mclasses(cli):
         'FlowGen',
         'IPChecksum',
         'Measure',
-        'Queue',
         'QueueInc',
         'QueueOut',
         'RandomUpdate',
@@ -79,21 +78,6 @@ def get_var_attrs(cli, var_token, partial_word):
             var_type = 'opts'
             var_desc = 'bess daemon command-line options (see "bessd -h")'
 
-        elif var_token == 'DRIVER':
-            var_type = 'name'
-            var_desc = 'name of a port driver'
-            try:
-                var_candidates = cli.bess.list_drivers().driver_names
-            except:
-                pass
-
-        elif var_token == '[NEW_PORT]':
-            var_type = 'name'
-            var_desc = 'specify a name of the new port'
-
-        elif var_token == '[PORT_ARGS...]':
-            var_type = 'map'
-
         elif var_token == 'MODE':
             var_type = 'name'
             var_desc = 'which type of traffic to generate'
@@ -103,20 +87,12 @@ def get_var_attrs(cli, var_token, partial_word):
                 pass
 
         elif var_token == 'PORT':
-            var_type = 'name'
-            var_desc = 'name of a port'
-            try:
-                var_candidates = [p.name for p in cli.bess.list_ports().ports]
-            except:
-                pass
+            var_type = 'portid'
+            var_desc = 'a port identifier'
 
         elif var_token == 'PORT...':
-            var_type = 'name+'
-            var_desc = 'one or more port names'
-            try:
-                var_candidates = [p.name for p in cli.bess.list_ports().ports]
-            except:
-                pass
+            var_type = 'portid+'
+            var_desc = 'a port identifier'
 
         elif var_token == '[TRAFFIC_SPEC...]':
             var_type = 'map'
@@ -140,7 +116,7 @@ def get_var_attrs(cli, var_token, partial_word):
 #   tail: the rest of input line
 # You can assume that 'line == head + tail'
 def split_var(cli, var_type, line):
-    if var_type in ['name', 'filename', 'endis', 'int']:
+    if var_type in ['name', 'filename', 'endis', 'int', 'portid']:
         pos = line.find(' ')
         if pos == -1:
             head = line
@@ -149,7 +125,7 @@ def split_var(cli, var_type, line):
             head = line[:pos]
             tail = line[pos:]
 
-    elif var_type in ['wid+', 'name+', 'map', 'pyobj', 'opts']:
+    elif var_type in ['wid+', 'name+', 'map', 'pyobj', 'opts', 'portid+']:
         head = line
         tail = ''
 
@@ -190,6 +166,16 @@ def bind_var(cli, var_type, line):
             if re.match(r'^[_a-zA-Z][\w]*$', name) is None:
                 raise cli.BindError('"name" must be [_a-zA-Z][_a-zA-Z0-9]*')
 
+    elif var_type == 'portid':
+        if re.match(r'^[\d\.:]*$', val) is None:
+            raise cli.BindError('"name" must be [.:0-9]*')
+
+    elif var_type == 'portid+':
+        val = sorted(list(set(head.split())))  # collect unique items
+        for name in val:
+            if re.match(r'^[\d\.:]*$', name) is None:
+                raise cli.BindError('"name" must be [.:0-9]*')
+
     elif var_type == 'filename':
         if val.find('\0') >= 0:
             raise cli.BindError('Invalid filename')
@@ -228,7 +214,6 @@ bessctl_cmds = [
     'daemon start [BESSD_OPTS...]',
     'daemon connect',
     'daemon disconnect',
-    'add port DRIVER [NEW_PORT] [PORT_ARGS...]',
 ]
 
 cmdlist = filter(lambda x: x[0] in bessctl_cmds, bess_commands.cmdlist)
@@ -423,17 +408,6 @@ def _create_rate_limit_tree(cli, wid, resource, limit):
     return (rr_name, rl_name, leaf_name)
 
 
-src_ether='02:1e:67:9f:4d:aa'
-dst_ether='02:1e:67:9f:4d:bb'
-eth = scapy.Ether(src=src_ether, dst=dst_ether)
-src_ip='10.0.0.1'
-dst_ip='192.0.0.1'
-ip = scapy.IP(src=src_ip, dst=dst_ip)
-src_port = 10001
-tcp = scapy.TCP(sport=src_port, dport=12345, seq=12345)
-payload = "meow"
-DEFAULT_TEMPLATE = str(eth/ip/tcp/payload)
-
 """
 TRAFFIC_SPEC:
     loss_rate -- target percentage of packet loss (default 0.0)
@@ -446,6 +420,17 @@ TRAFFIC_SPEC:
     duration -- distribution of flow durations (either 'uniform' or 'pareto')
 """
 def _start_flowgen(cli, port, spec):
+    src_ether='02:1e:67:9f:4d:aa'
+    dst_ether='02:1e:67:9f:4d:bb'
+    eth = scapy.Ether(src=src_ether, dst=dst_ether)
+    src_ip='10.0.0.1'
+    dst_ip='192.0.0.1'
+    ip = scapy.IP(src=src_ip, dst=dst_ip)
+    src_port = 10001
+    tcp = scapy.TCP(sport=src_port, dport=12345, seq=12345)
+    payload = "meow"
+    DEFAULT_TEMPLATE = str(eth/ip/tcp/payload)
+
     if spec.flow_rate is None:
         spec.flow_rate = spec.num_flows / spec.flow_duration
 
@@ -454,7 +439,12 @@ def _start_flowgen(cli, port, spec):
 
     num_cores = len(spec.cores)
     flows_per_core = spec.num_flows / num_cores
-    pps_per_core = spec.pps / num_cores
+
+    if spec.pps is not None:
+        pps_per_core = spec.pps / num_cores
+    else:
+        pps_per_core = 5e6
+
     if spec.mbps is not None:
         bps_per_core = long(1e6 * spec.mbps / num_cores)
 
@@ -475,7 +465,7 @@ def _start_flowgen(cli, port, spec):
             cli.bess.attach_task(src.name, 0, wid=core)
 
         # Setup tx pipeline
-        tx_pipe = [src, Queue()]
+        tx_pipe = [src, IPChecksum()]
         if spec.latency:
             tx_pipe.append(Timestamp())
         tx_pipe.append(QueueOut(port=port, qid=i))
@@ -568,8 +558,7 @@ def _start_udp(cli, port, spec):
                                    'size': 4,
                                    'min': 0x0a000001,
                                    'max': 0x0a000001 + num_flows - 1}]),
-            IPChecksum(),
-            Queue()
+            IPChecksum()
         ]
         if spec.latency:
             tx_pipe.append(Timestamp())
@@ -578,6 +567,7 @@ def _start_udp(cli, port, spec):
 
         # Setup rx pipeline
         rx_pipe = [QueueInc(port=port, qid=i)]
+        cli.bess.attach_task(rx_pipe[0].name, 0, wid=core)
         if spec.latency:
             rx_pipe.append(Measure())
         rx_pipe.append(Sink())
@@ -648,7 +638,6 @@ def _start_http(cli, port, spec):
                                             len(payload_prefix) + 1,
                                   'size': 1, 'min': 97, 'max': 122}]),
             IPChecksum(),
-            Queue()
         ]
         if spec.latency:
             tx_pipe.append(Timestamp())
@@ -666,11 +655,39 @@ def _start_http(cli, port, spec):
     return (tx_pipes, rx_pipes)
 
 
+def _create_port_args(cli, port_id, num_cores):
+    args = {'driver': None, 'name': port_id,
+            'arg': {'num_inc_q': num_cores, 'num_out_q': num_cores}}
+    args['driver'] = 'PMDPort'
+    if re.match(r'^\d\d:\d\d.\d$', port_id) is not None:
+        args['arg']['pci'] = port_id
+    else:
+        try:
+            args['arg']['port_id'] = int(port_id)
+        except:
+            raise cli.CommandError('Invalid port index')
+    return args
+
+
 @cmd('start PORT MODE [TRAFFIC_SPEC...]', 'Start sending packets on a port')
-def start(cli, port, mode, spec):
+def start(cli, port, mode, spec=dict()):
     setup_mclasses(cli)
+    if not isinstance(port, str):
+        raise cli.CommandError('Port identifier must be a string')
+
+    if 'cores' in spec:
+        cores = spec['cores'].split(' ')
+    else:
+        cores = [0]
+    num_cores = len(cores)
+    port_args = _create_port_args(cli, port, num_cores)
+    with cli.bess_lock:
+        ret = cli.bess.create_port(port_args['driver'], port_args['name'],
+                                   arg=port_args['arg'])
+        port = ret.name
+
     if cli.port_is_running(port):
-        return cli.CommandError("Port %s is already running" % (port,))
+        raise cli.CommandError("Port %s is already running" % (port,))
 
     if mode == 'flowgen':
         if spec is not None:
@@ -703,14 +720,19 @@ def start(cli, port, mode, spec):
 @cmd('stop PORT...', 'Stop sending packets on a set of ports')
 def stop(cli, ports):
     setup_mclasses(cli)
+    sessions = []
     for port in ports:
-        sess = cli.remove_session(port)
+        sessions.append(cli.remove_session(port))
+
+    for sess in sessions:
         with cli.bess_lock:
             cli.bess.pause_all()
             try:
-                for m in sess.tx_pipeline():
-                    cli.bess.destroy_module(m.name)
-                for m in sess.rx_pipeline():
-                    cli.bess.destroy_module(m.name)
+                for core, pipe in sess.tx_pipelines().items():
+                    for m in pipe.modules:
+                        cli.bess.destroy_module(m.name)
+                for core, pipe in sess.rx_pipelines().items():
+                    for m in pipe.modules:
+                        cli.bess.destroy_module(m.name)
             finally:
                 cli.bess.resume_all()

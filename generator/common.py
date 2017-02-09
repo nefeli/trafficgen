@@ -63,7 +63,7 @@ class HttpSpec(TrafficSpec):
 
 class FlowGenSpec(TrafficSpec):
     def __init__(self, pkt_size=60, num_flows=10,
-                 flow_duration=1, flow_rate=None, arrival='uniform',
+                 flow_duration=5, flow_rate=None, arrival='uniform',
                  duration='uniform', **kwargs):
         self.pkt_size = pkt_size
         self.num_flows = num_flows
@@ -82,10 +82,9 @@ class Session(object):
         self.__curr_stats = None
         self.__last_stats = None
         """
-        `__last_rtt` and `__curr_rtt` store the average of the rtt measurements
+        `__curr_rtt` stores the average of the rtt measurements
         from each worker associated to this session. 
         """
-        self.__last_rtt = None
         self.__curr_rtt = None
         self.__now = now
         self.__last_check = now
@@ -104,11 +103,11 @@ class Session(object):
     def spec(self):
         return self.__spec
 
-    def tx_pipeline(self):
-        return self.__tx_pipeline
+    def tx_pipelines(self):
+        return self.__tx_pipelines
 
-    def rx_pipeline(self):
-        return self.__rx_pipeline
+    def rx_pipelines(self):
+        return self.__rx_pipelines
 
     def last_stats(self):
         return self.__last_stats
@@ -116,15 +115,13 @@ class Session(object):
     def curr_stats(self):
         return self.__curr_stats
 
-    def last_rtt(self):
-        return self.__last_rtt
-
     def curr_rtt(self):
         return self.__curr_rtt
 
     def last_check(self):
         return self.__last_chck
 
+    # TODO: allow dynamic tx on mbps
     def adjust_tx_rate(self, cli):
         if self.__spec.loss_rate is None or self.__spec.pps is None:
             return
@@ -175,11 +172,7 @@ class Session(object):
         return stats
 
     def update_rtt(self, cli):
-        if self.__last_rtt is not None:
-            self.__last_rtt = self.__curr_rtt
         cli.bess.pause_all()
         self.__curr_rtt = self._get_rtt()
         cli.bess.resume_all()
-        if self.__last_rtt is None:
-            self.__last_rtt = self.__curr_rtt
         self.__last_check = self.__now

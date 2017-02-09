@@ -36,7 +36,7 @@ class TGENCLI(cli.CLI):
 
     def add_session(self, sess):
         with self.__running_lock:
-            self.__running[sess.port()] = sess
+            self.__running[str(sess.port())] = sess
 
     def remove_session(self, port):
         with self.__running_lock:
@@ -45,7 +45,7 @@ class TGENCLI(cli.CLI):
 
     def get_session(self, port):
         with self.__running_lock:
-            ret = self.__running.get(port, None)
+            ret = self.__running.get(str(port), None)
         return ret
 
     def clear_sessions(self):
