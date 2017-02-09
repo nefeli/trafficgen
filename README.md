@@ -45,6 +45,5 @@ localhost:10514 $ start 03:00.0 udp
 localhost:10514 $ monitor port 03:00.0
 ```
 
-## Advanced Traffic Generation
-
-Coming soon.
+See the [advanced guide](AdvancedGuide.md) for how to generate different types
+of traffic.
