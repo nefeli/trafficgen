@@ -225,6 +225,4 @@ def run_cli():
                   history_file=hist_file)
     print('Starting BESS...')
     bess_commands._do_start(cli, '')
-    bess_commands.warn(cli, 'About to clear any existing BESS pipelines.',
-        bess_commands._do_reset)
     cli.loop()
