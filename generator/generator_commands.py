@@ -726,6 +726,7 @@ def stop(cli, ports):
                 for core, pipe in sess.rx_pipelines().items():
                     for m in pipe.modules:
                         cli.bess.destroy_module(m.name)
+                    cli.bess.destroy_worker(core)
 
                 cli.bess.destroy_port(sess.port())
             finally:
