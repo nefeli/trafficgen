@@ -386,7 +386,7 @@ def _connect_pipeline(cli, pipe):
             u = pipe[i]
             if i < len(pipe) - 1:
                 v =  pipe[i + 1]
-                cli.bess.connect_modules(u.name, v.name)
+                u.connect(v)
         cli.bess.resume_all()
 
 
