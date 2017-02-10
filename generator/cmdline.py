@@ -34,6 +34,11 @@ class TGENCLI(cli.CLI):
             ret = port in self.__running
         return ret
 
+    def ports(self):
+        with self.__running_lock:
+            ret = list(self.__running.keys())
+        return ret
+
     def add_session(self, sess):
         with self.__running_lock:
             self.__running[str(sess.port())] = sess
