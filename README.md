@@ -45,5 +45,19 @@ localhost:10514 $ start 03:00.0 udp
 localhost:10514 $ monitor port 03:00.0
 ```
 
+Use the following commands to start, stop and monitor traffic:
+
+```
+monitor pipeline                                  Monitor packet counters in the datapath pipeline
+help                                              List available commands
+show config                                       Show the current confiugration of all ports
+show config PORT...                               Show the current confiugration of a port
+reset                                             Reset trafficgen
+monitor port                                      Monitor the current traffic of all ports
+monitor port PORT...                              Monitor the current traffic of specified ports
+start PORT MODE [TRAFFIC_SPEC...]                 Start sending packets on a port
+stop PORT...                                      Stop sending packets on a set of ports
+```
+
 See the [advanced guide](AdvancedGuide.md) for how to generate different types
 of traffic.
