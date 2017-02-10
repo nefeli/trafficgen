@@ -463,6 +463,7 @@ def _start_flowgen(cli, port, spec):
     if spec.mbps is not None:
         bps_per_core = long(1e6 * spec.mbps / num_cores)
 
+
     cli.bess.pause_all()
     for i, core in enumerate(spec.cores):
         cli.bess.add_worker(wid=core, core=core)
@@ -470,7 +471,7 @@ def _start_flowgen(cli, port, spec):
                     flow_rate=flows_per_core, flow_duration=spec.flow_duration,
                     arrival=spec.arrival, duration=spec.duration,
                     quick_rampup=True)
-        if spec.latency:
+        if spec.mbps is not None:
             rr_name, rl_name, leaf_name = _create_rate_limit_tree(cli,
                                                                   core,
                                                                   'bit',
@@ -480,18 +481,12 @@ def _start_flowgen(cli, port, spec):
             cli.bess.attach_task(src.name, 0, wid=core)
 
         # Setup tx pipeline
-        tx_pipe = [src, IPChecksum()]
-        if spec.latency:
-            tx_pipe.append(Timestamp())
-        tx_pipe.append(QueueOut(port=port, qid=i))
+        tx_pipe = [src, IPChecksum(), Timestamp(), QueueOut(port=port, qid=i)]
         tx_pipes[core] = Pipeline(tx_pipe)
 
         # Setup rx pipeline
-        rx_pipe = [QueueInc(port=port, qid=i)]
+        rx_pipe = [QueueInc(port=port, qid=i), Measure(), Sink()]
         cli.bess.attach_task(rx_pipe[0].name, 0, wid=core)
-        if spec.latency:
-            rx_pipe.append(Measure())
-        rx_pipe.append(Sink())
         rx_pipes[core] = Pipeline(rx_pipe)
     cli.bess.resume_all()
 
@@ -573,19 +568,15 @@ def _start_udp(cli, port, spec):
                                    'size': 4,
                                    'min': 0x0a000001,
                                    'max': 0x0a000001 + num_flows - 1}]),
-            IPChecksum()
+            IPChecksum(),
+            Timestamp(),
+            QueueOut(port=port, qid=i)
         ]
-        if spec.latency:
-            tx_pipe.append(Timestamp())
-        tx_pipe.append(QueueOut(port=port, qid=i))
         tx_pipes[core] = Pipeline(tx_pipe, rl_name)
 
         # Setup rx pipeline
-        rx_pipe = [QueueInc(port=port, qid=i)]
+        rx_pipe = [QueueInc(port=port, qid=i), Measure(), Sink()]
         cli.bess.attach_task(rx_pipe[0].name, 0, wid=core)
-        if spec.latency:
-            rx_pipe.append(Measure())
-        rx_pipe.append(Sink())
         rx_pipes[core] = Pipeline(rx_pipe)
 
     cli.bess.resume_all()
@@ -635,7 +626,7 @@ def _start_http(cli, port, spec):
         src = FlowGen(template=pkt_template, pps=pps_per_core,
                      flow_rate=flows_per_core, flow_duration=5,
                      arrival='uniform', duration='uniform', quick_rampup=False)
-        if spec.latency:
+        if spec.mbps is not None:
             rr_name, rl_name, leaf_name = _create_rate_limit_tree(cli,
                                                                   core,
                                                                   'bit',
@@ -653,18 +644,14 @@ def _start_http(cli, port, spec):
                                             len(payload_prefix) + 1,
                                   'size': 1, 'min': 97, 'max': 122}]),
             IPChecksum(),
+            Timestamp(),
+            QueueOut(port=port, qid=i)
         ]
-        if spec.latency:
-            tx_pipe.append(Timestamp())
-        tx_pipe.append(QueueOut(port=port, qid=i))
         tx_pipes[core] = Pipeline(tx_pipe)
 
         # Setup rx pipeline
-        rx_pipe = [QueueInc(port=port, qid=i)]
+        rx_pipe = [QueueInc(port=port, qid=i), Measure(), Sink()]
         cli.bess.attach_task(rx_pipe[0].name, 0, wid=core)
-        if spec.latency:
-            rx_pipe.append(Measure())
-        rx_pipe.append(Sink())
         rx_pipes[core] = Pipeline(rx_pipe)
     cli.bess.resume_all()
 

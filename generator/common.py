@@ -29,16 +29,13 @@ class Pipeline(object):
 
 
 class TrafficSpec(object):
-    def __init__(self, loss_rate=None, latency=False, pps=None, mbps=None,
+    def __init__(self, loss_rate=None, pps=None, mbps=None,
                  cores=None, src_mac='02:1e:67:9f:4d:bb',
                  dst_mac='02:1e:67:9f:4d:bb', src_ip='192.168.0.1',
                  dst_ip='10.0.0.1'):
         self.loss_rate = loss_rate
-        self.latency = latency
         self.pps = pps
         self.mbps = mbps
-        if latency and self.mbps is None:
-            self.mbps = 100
         self.src_mac = src_mac
         self.dst_mac = dst_mac
         self.src_ip = src_ip
@@ -67,7 +64,6 @@ class TrafficSpec(object):
         ret = ''
         attrs = [
             ('loss_rate', lambda x: str(x) if x else 'disabled'),
-            ('latency', lambda x: 'true' if x else 'false'),
             ('pps', lambda x: str(x) if x else '<= line rate'),
             ('mbps', lambda x: str(x) if x else '<= line rate'),
             ('src_mac', lambda x: x),

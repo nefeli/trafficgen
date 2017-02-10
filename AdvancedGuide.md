@@ -25,7 +25,6 @@ The following options are applicable to all modes of traffic.
 Option | Description
 ------ | -----------
 `loss_rate` | Setting `loss_rate=X` will result in trafficgen sending traffic at rate such that it sees a frame last rate of `X` (in `[0,1]`) as defined by [RFC2544](https://tools.ietf.org/html/rfc2544#section-26.3). If `loss_rate` is set, `pps` must be set to the initial sending rate. By befault `loss_rate` is not set and trafficgen sends at whatever rate you tell it to.
-`latency` | Setting `latency=1` will result in trafficgen sending traffic at a low rate (100mbps by default) to make measurements of the mean, median and 99th percentile round-trip latencies. Latency measurements are reported in the output of `monitor port` as `rtt_avg`, `rtt_med` and `rtt_99`. By default `latency` is not set.
 `pps` | Setting `pps=X` will result in trafficgen sending traffic at `X` packets per second. When set with `loss_rate`, trafficgen will start sending at `X` packets per second before adjusting the sending rate. By default `pps` is not set, meaning trafficgen will try to send at line rate.
 `mbps` | Setting `mbps=X` will result in trafficgen sending traffic at `X` megabits per second. By default `mbps` is not set and trafficgen will try to send at line rate.
 `cores` | Setting `cores` will split the work of generating traffic on a port across multiple cores. For example, setting `cores="0 1 2"` will result in trafficgen splitting traffic across cores `0`, `1` and `2`. By default `cores` is not set and trafficgen will pick an available core at random.

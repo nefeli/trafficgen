@@ -74,16 +74,13 @@ class TGENCLI(cli.CLI):
                 try:
                     with self.bess_lock:
                         for port, sess in self.__running.items():
-                            if sess.spec().latency:
-                                sess.update_rtt(self)
-                            else:
-                                sess.update_port_stats(self, now)
+                            sess.update_rtt(self)
+                            sess.update_port_stats(self, now)
 
                         self.bess.pause_all()
                         try:
                             for port, sess in self.__running.items():
-                                if not sess.spec().latency:
-                                    sess.adjust_tx_rate(self)
+                                sess.adjust_tx_rate(self)
                         finally:
                             self.bess.resume_all()
                 except bess.BESS.APIError:
