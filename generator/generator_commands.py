@@ -361,7 +361,8 @@ def _monitor_ports(cli, *ports):
         if not ports:
             raise cli.CommandError('No port to monitor')
 
-    cli.fout.write('Monitoring ports: %s\n' % ', '.join(ports))
+    cli.fout.write('Monitoring ports: %s (Send CTRL + c to stop)\n' % \
+                   ', '.join(ports))
 
     last = {}
     now = {}
