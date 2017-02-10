@@ -228,3 +228,24 @@ def run_cli():
     print('Starting BESS...')
     bess_commands._do_start(cli, '-k')
     cli.loop()
+
+
+def run_cmds(instream):
+    try:
+        s = bess.BESS()
+        s.connect()
+    except bess.BESS.APIError:
+        # show no error msg, since user might be about to launch the daemon
+        pass
+
+    cli = TGENCLI(s, generator_commands, fin=instream, ferr=sys.stderr,
+                  interactive=False)
+    print('Starting BESS...')
+    bess_commands._do_start(cli, '-k')
+    cli.loop()
+
+    # end of loop due to error?
+    if cli.stop_loop:
+        if cli.last_cmd:
+            cli.ferr.write('  Command failed: %s\n' % cli.last_cmd)
+        sys.exit(1)
