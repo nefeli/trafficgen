@@ -290,7 +290,7 @@ def _monitor_ports(cli, *ports):
         cli.fout.write('%-20s%14s%10s%10s%10s%10s%10s       %14s%10s%10s\n' %
                        (time.strftime('%X') + str(timestamp % 1)[1:8],
                         'INC     Mbps', 'Mpps', 'dropped',
-                        'avg_rtt', 'med_rtt', '99_rtt',
+                        'avg_rtt (us)', 'med_rtt (us)', '99_rtt (us)',
                         'OUT     Mbps', 'Mpps', 'dropped'))
 
         cli.fout.write('%s\n' % ('-' * 126))
