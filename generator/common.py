@@ -46,6 +46,42 @@ class TrafficSpec(object):
         self.cores = list(map(int, cores.split(' ')))
 
 
+    """Print attribtues of an object in a two-column table of `width` characters
+
+    Arguements:
+        obj -- the object to print
+        attrs -- a list of pairs (a, f). a is the attribute, f handles
+                 converting that attribue to a string
+        width -- row width in characters
+    """
+    def _attrs_to_str(self, attrs, width):
+        lines = list()
+        for a, f in attrs:
+            val_len = width - len(a) + 2
+            s = '%s: %%%ds' % (a, val_len)
+            val = getattr(self, a)
+            lines.append(s % f(val))
+        return '\n'.join(lines)
+
+    def __str__(self):
+        ret = ''
+        attrs = [
+            ('loss_rate', lambda x: str(x) if x else 'disabled'),
+            ('latency', lambda x: 'true' if x else 'false'),
+            ('pps', lambda x: str(x) if x else '<= line rate'),
+            ('mbps', lambda x: str(x) if x else '<= line rate'),
+            ('src_mac', lambda x: x),
+            ('dst_mac', lambda x: x),
+            ('src_ip', lambda x: x),
+            ('dst_ip', lambda x: x),
+            ('cores', lambda x: ','.join(map(str, x)))
+        ]
+        return self._attrs_to_str(attrs, 25)
+
+    def __repr__(self):
+        return self.__str__()
+
+
 class UdpSpec(TrafficSpec):
     def __init__(self, pkt_size=60, num_flows=1, imix=False, **kwargs):
         self.pkt_size = pkt_size
@@ -53,12 +89,35 @@ class UdpSpec(TrafficSpec):
         self.imix = imix
         super(UdpSpec, self).__init__(**kwargs)
 
+    def __str__(self):
+        s = super(UdpSpec, self).__str__() + '\n'
+        attrs = [
+            ('pkt_size', lambda x: str(x)),
+            ('num_flows', lambda x: str(x)),
+            ('imix', lambda x: 'enabled' if x else 'disabled')
+        ]
+        return s + self._attrs_to_str(attrs, 25)
+
+    def __repr__(self):
+        return self.__str__()
+
 
 class HttpSpec(TrafficSpec):
     def __init__(self, num_flows=4000, src_port=1001, **kwargs):
         self.num_flows = num_flows
         self.src_port = src_port
         super(HttpSpec, self).__init__(**kwargs)
+
+    def __str__(self):
+        s = super(HttpSpec, self).__str__() + '\n'
+        attrs = [
+            ('num_flows', lambda x: str(x)),
+            ('src_port', lambda x: str(x)),
+        ]
+        return s + self._attrs_to_str(attrs, 25)
+
+    def __repr__(self):
+        return self.__str__()
 
 
 class FlowGenSpec(TrafficSpec):
@@ -73,6 +132,21 @@ class FlowGenSpec(TrafficSpec):
         self.duration = duration
         self.src_port = src_port
         super(FlowGenSpec, self).__init__(**kwargs)
+
+    def __str__(self):
+        s = super(FlowGenSpec, self).__str__() + '\n'
+        attrs = [
+            ('pkt_size', lambda x: str(x)),
+            ('num_flows', lambda x: str(x)),
+            ('flow_duration', lambda x: str(x) if x else 'auto'),
+            ('arrival', lambda x: str(x)),
+            ('duration', lambda x: str(x)),
+            ('src_port', lambda x: str(x))
+        ]
+        return s + self._attrs_to_str(attrs, 25)
+
+    def __repr__(self):
+        return self.__str__()
 
 
 class Session(object):

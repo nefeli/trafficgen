@@ -227,6 +227,28 @@ def help(cli):
         cli.fout.write('  %-50s%s\n' % (syntax, desc))
 
 
+def _show_config(cli, port):
+    sess = cli.get_session(port)
+    cli.fout.write('Port %s\n' % (port,))
+    divider = '-'*(4 + len(port)) + '\n'
+    cli.fout.write(divider)
+    cli.fout.write(str(sess.spec()) + '\n')
+    cli.fout.write(divider)
+
+def _show_configs(cli, ports):
+    sorted(list(set(ports)))
+    for port in ports:
+        _show_config(cli, port)
+
+@cmd('show config', 'Show the current confiugration of all ports')
+def show_config_all(cli):
+    _show_configs(cli, cli.ports())
+
+@cmd('show config PORT...', 'Show the current confiugration of a port')
+def show_config_all(cli, ports):
+    _show_configs(cli, ports)
+
+
 def _do_reset(cli):
     cli.clear_sessions()
     with cli.bess_lock:
