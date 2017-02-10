@@ -13,6 +13,80 @@ You can generate three types of traffic
 + `flowgen`: More realistic, flow-based traffic
 + `http`: Like `flowgen` but with HTTP payloads
 
+## Quick Start
+
+Here are a few useful commands to quickly get started. See [Options](#options)
+below for more a more detailed configurations.
+
+A simple benchmarking scenario might involve measuring how well a DUT copes with
+various amounts of incoming flows. You can generate 10,000 infinitely long-lived
+UDP flows containing 60 byte packets with the following command. You can
+identify which port to generate traffic on by either its PCI address in
+`BUS:SLOT.FUNCTION` format, or by its integral DPDK port id.
+
+```
+localhost:10514 $ start 03:00.0 udp num_flows=10000, pkt_size=60
+```
+
+You can then check how well the DUT is keeping up by running `monitor port`
+which will produce the output below. The `INC` columns indicate the rate of
+return traffic from the DUT along with the average, median and 99th percentile
+round-trip times experienced by packets (reported in microseconds).
+
+```
+localhost:10514 $ monitor port
+Monitoring ports: 03:00.0 (Send CTRL + c to stop)
+
+14:40:49.469716       INC     Mbps      Mpps   dropped   avg_rtt (us)   med_rtt (us)    99_rtt (us)         OUT     Mbps      Mpps   dropped
+---------------------------------------------------------------------------------------------------------------------------------------------
+03:00.0/PMDPort            10128.9    15.070      3582         15.314         14.650         18.200               10134.5    15.081       143
+---------------------------------------------------------------------------------------------------------------------------------------------
+```
+
+Running `show config` will dump the current configuration of all active ports,
+including information like MAC addresses, a list of cores used, and other
+mode-specific settings:
+
+```
+localhost:10514 $ show config
+Port 03:00.0
+-----------
+loss_rate:           disabled
+pps:             <= line rate
+mbps:            <= line rate
+src_mac:    3c:fd:fe:a2:a6:e0
+dst_mac:    02:1e:67:9f:4d:bb
+src_ip:           192.168.0.1
+dst_ip:              10.0.0.1
+cores:                      0
+pkt_size:                  60
+num_flows:               1000
+imix:                disabled
+-----------
+```
+
+To step generating traffic just enter `stop 03:00.0` at the prompt.
+
+If you're benchmarking a DUT over a fast NIC, you may need to use multiple cores
+to saturate the link. You can do that by appending the `cores` option to your
+command like so:
+
+```
+localhost:10514 $ start 03:00.0 udp num_flows=10000, pkt_size=60, cores="0 1"
+```
+
+Run `monitor ports` again and note the higher rates in the `OUT` columns.
+
+```
+localhost:10514 $ monitor port
+Monitoring ports: 03:00.0 (Send CTRL + c to stop)
+
+14:40:49.469716       INC     Mbps      Mpps   dropped   avg_rtt (us)   med_rtt (us)    99_rtt (us)         OUT     Mbps      Mpps   dropped
+---------------------------------------------------------------------------------------------------------------------------------------------
+03:00.0/PMDPort            12551.5    18.124    775004         38.612         28.775         65.300               21692.3    32.280       782
+---------------------------------------------------------------------------------------------------------------------------------------------
+```
+
 ## Options 
 
 There are several knobs you can tweak to control traffic. They are specified
