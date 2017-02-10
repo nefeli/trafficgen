@@ -229,5 +229,5 @@ def run_cli():
     cli = TGENCLI(s, generator_commands, ferr=stderr, interactive=interactive,
                   history_file=hist_file)
     print('Starting BESS...')
-    bess_commands._do_start(cli, '')
+    bess_commands._do_start(cli, '-k')
     cli.loop()
