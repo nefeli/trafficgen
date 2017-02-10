@@ -287,19 +287,19 @@ def _monitor_ports(cli, *ports):
 
     def print_header(timestamp):
         cli.fout.write('\n')
-        cli.fout.write('%-20s%14s%10s%10s%10s%10s%10s       %14s%10s%10s\n' %
+        cli.fout.write('%-20s%14s%10s%10s%15s%15s%15s       %14s%10s%10s\n' %
                        (time.strftime('%X') + str(timestamp % 1)[1:8],
                         'INC     Mbps', 'Mpps', 'dropped',
                         'avg_rtt (us)', 'med_rtt (us)', '99_rtt (us)',
                         'OUT     Mbps', 'Mpps', 'dropped'))
 
-        cli.fout.write('%s\n' % ('-' * 126))
+        cli.fout.write('%s\n' % ('-' * 141))
 
     def print_footer():
-        cli.fout.write('%s\n' % ('-' * 126))
+        cli.fout.write('%s\n' % ('-' * 141))
 
     def print_delta(port, delta):
-        cli.fout.write('%-20s%14.1f%10.3f%10d%10.3f%10.3f%10.3f        %14.1f%10.3f%10d\n' %
+        cli.fout.write('%-20s%14.1f%10.3f%10d%15.3f%15.3f%15.3f        %14.1f%10.3f%10d\n' %
                        (port,
                         (delta.inc_bytes + delta.inc_packets * 24) * 8 / 1e6,
                         delta.inc_packets / 1e6,
@@ -684,7 +684,7 @@ def start(cli, port, mode, spec):
                            _stop, port)
 
     if spec is not None and 'cores' in spec:
-        cores = spec.pop('cores').split(' ')
+        cores = list(map(int, spec.pop('cores').split(' ')))
     else:
         if len(available_cores) > 0:
             cores = [available_cores.pop(0)]
