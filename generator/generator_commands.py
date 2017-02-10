@@ -368,8 +368,8 @@ def _monitor_ports(cli, *ports):
         while True:
             time.sleep(1)
 
-            sess = cli.get_session(port)
             for port in ports:
+                sess = cli.get_session(port)
                 now[port] = get_all_stats(cli, sess)
 
             print_header(now[port]['timestamp'])
