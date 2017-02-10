@@ -466,7 +466,7 @@ def _start_flowgen(cli, port, spec):
                     arrival=spec.arrival, duration=spec.duration,
                     quick_rampup=True)
         if spec.latency:
-            rl_name, rr_name, leaf_name = _create_rate_limit_tree(cli,
+            rr_name, rl_name, leaf_name = _create_rate_limit_tree(cli,
                                                                   core,
                                                                   'bit',
                                                                   bps_per_core)
@@ -542,13 +542,13 @@ def _start_udp(cli, port, spec):
         cli.bess.add_worker(wid=core, core=core)
         src = Source()
         if spec.mbps is not None:
-            rl_name, rr_name, leaf_name = _create_rate_limit_tree(cli,
+            rr_name, rl_name, leaf_name = _create_rate_limit_tree(cli,
                                                                   core,
                                                                   'bit',
                                                                   bps_per_core)
             cli.bess.attach_task(src.name, tc=leaf_name)
         elif spec.pps is not None:
-            rl_name, rr_name, leaf_name = _create_rate_limit_tree(cli,
+            rr_name, rl_name, leaf_name = _create_rate_limit_tree(cli,
                                                                   core,
                                                                   'packet',
                                                                   pps_per_core)
@@ -630,7 +630,7 @@ def _start_http(cli, port, spec):
                      flow_rate=flows_per_core, flow_duration=5,
                      arrival='uniform', duration='uniform', quick_rampup=False)
         if spec.latency:
-            rl_name, rr_name, leaf_name = _create_rate_limit_tree(cli,
+            rr_name, rl_name, leaf_name = _create_rate_limit_tree(cli,
                                                                   core,
                                                                   'bit',
                                                                   bps_per_core)
