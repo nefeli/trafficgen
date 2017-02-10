@@ -30,7 +30,7 @@ class Pipeline(object):
 
 class TrafficSpec(object):
     def __init__(self, loss_rate=None, latency=False, pps=None, mbps=None,
-                 cores='0', src_mac='02:1e:67:9f:4d:bb',
+                 cores=None, src_mac='02:1e:67:9f:4d:bb',
                  dst_mac='02:1e:67:9f:4d:bb', src_ip='192.168.0.1',
                  dst_ip='10.0.0.1'):
         self.loss_rate = loss_rate
@@ -43,7 +43,7 @@ class TrafficSpec(object):
         self.dst_mac = dst_mac
         self.src_ip = src_ip
         self.dst_ip = dst_ip
-        self.cores = list(map(int, cores.split(' ')))
+        self.cores = cores
 
 
     """Print attribtues of an object in a two-column table of `width` characters

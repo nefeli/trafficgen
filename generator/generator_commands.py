@@ -1,27 +1,30 @@
+import collections
+import copy
+import errno
+import fcntl
+import fnmatch
+import glob
+import inspect
+import multiprocessing
 import os
 import os.path
-import sys
-import fnmatch
-import socket
-import fcntl
-import errno
-import glob
-import re
-import subprocess
 import pprint
-import copy
-import time
-import inspect
-import traceback
-import tempfile
-import signal
-import collections
+import re
 import scapy.all as scapy
+import signal
+import socket
+import subprocess
+import sys
+import tempfile
+import time
+import traceback
 
 import commands as bess_commands
 from module import *
 
 from common import *
+
+available_cores = list(range(multiprocessing.cpu_count()))
 
 @staticmethod
 def _choose_arg(arg, kwargs):
@@ -250,7 +253,9 @@ def show_config_all(cli, ports):
 
 
 def _do_reset(cli):
-    cli.clear_sessions()
+    for port in cli.ports():
+        _stop(cli, port)
+
     with cli.bess_lock:
         cli.bess.pause_all()
         cli.bess.reset_all()
@@ -483,6 +488,7 @@ def _start_flowgen(cli, port, spec):
 
         # Setup rx pipeline
         rx_pipe = [QueueInc(port=port, qid=i)]
+        cli.bess.attach_task(rx_pipe[0].name, 0, wid=core)
         if spec.latency:
             rx_pipe.append(Measure())
         rx_pipe.append(Sink())
@@ -655,6 +661,7 @@ def _start_http(cli, port, spec):
 
         # Setup rx pipeline
         rx_pipe = [QueueInc(port=port, qid=i)]
+        cli.bess.attach_task(rx_pipe[0].name, 0, wid=core)
         if spec.latency:
             rx_pipe.append(Measure())
         rx_pipe.append(Sink())
@@ -680,6 +687,7 @@ def _create_port_args(cli, port_id, num_cores):
 
 @cmd('start PORT MODE [TRAFFIC_SPEC...]', 'Start sending packets on a port')
 def start(cli, port, mode, spec):
+    global available_cores
     setup_mclasses(cli)
     if not isinstance(port, str):
         raise cli.CommandError('Port identifier must be a string')
@@ -689,9 +697,12 @@ def start(cli, port, mode, spec):
                            _stop, port)
 
     if spec is not None and 'cores' in spec:
-        cores = spec['cores'].split(' ')
+        cores = spec.pop('cores').split(' ')
     else:
-        cores = [0]
+        if len(available_cores) > 0:
+            cores = [available_cores.pop(0)]
+        else:
+            raise cli.InternalError('No available cores.')
 
     num_cores = len(cores)
     port_args = _create_port_args(cli, port, num_cores)
@@ -708,21 +719,21 @@ def start(cli, port, mode, spec):
 
     if mode == 'flowgen':
         if spec is not None:
-            ts = FlowGenSpec(**spec)
+            ts = FlowGenSpec(cores=cores, **spec)
         else:
-            ts = FlowGenSpec(src_mac=ret.mac_addr)
+            ts = FlowGenSpec(src_mac=ret.mac_addr, cores=cores)
         tx_pipes, rx_pipes = _start_flowgen(cli, port, spec=ts)
     elif mode == 'udp':
         if spec is not None:
-            ts = UdpSpec(**spec)
+            ts = UdpSpec(cores=cores, **spec)
         else:
-            ts = UdpSpec(src_mac=ret.mac_addr)
+            ts = UdpSpec(src_mac=ret.mac_addr, cores=cores)
         tx_pipes, rx_pipes = _start_udp(cli, port, spec=ts)
     elif mode == 'http':
         if spec is not None:
-            ts = HttpSpec(**spec)
+            ts = HttpSpec(cores=cores, **spec)
         else:
-            ts = HttpSpec(src_mac=ret.mac_addr)
+            ts = HttpSpec(src_mac=ret.mac_addr, cores=cores)
         tx_pipes, rx_pipes = _start_http(cli, port, spec=ts)
 
     for core, tx_pipe in tx_pipes.items():
@@ -735,7 +746,9 @@ def start(cli, port, mode, spec):
 
 
 def _stop(cli, port):
+    global available_cores
     sess = cli.remove_session(port)
+    available_cores = list(sorted(available_cores + sess.spec().cores))
     with cli.bess_lock:
         cli.bess.pause_all()
         try:

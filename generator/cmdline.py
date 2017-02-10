@@ -1,11 +1,11 @@
+import cStringIO
 import errno
 import os
-import sys
 import pprint
-import cStringIO
+import sys
 import tempfile
-import time
 import threading
+import time
 
 import bess
 import cli
