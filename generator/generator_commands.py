@@ -684,6 +684,10 @@ def start(cli, port, mode, spec):
     if not isinstance(port, str):
         raise cli.CommandError('Port identifier must be a string')
 
+    if cli.port_is_running(port):
+        bess_commands.warn(cli, 'Port %s is already running.' % (port,),
+                           _stop, port)
+
     if spec is not None and 'cores' in spec:
         cores = spec['cores'].split(' ')
     else:
@@ -730,26 +734,25 @@ def start(cli, port, mode, spec):
     cli.add_session(Session(port, ts, tx_pipes, rx_pipes))
 
 
+def _stop(cli, port):
+    sess = cli.remove_session(port)
+    with cli.bess_lock:
+        cli.bess.pause_all()
+        try:
+            for core, pipe in sess.tx_pipelines().items():
+                for m in pipe.modules:
+                    cli.bess.destroy_module(m.name)
+
+            for core, pipe in sess.rx_pipelines().items():
+                for m in pipe.modules:
+                    cli.bess.destroy_module(m.name)
+                cli.bess.destroy_worker(core)
+
+            cli.bess.destroy_port(sess.port())
+        finally:
+            cli.bess.resume_all()
+
 @cmd('stop PORT...', 'Stop sending packets on a set of ports')
 def stop(cli, ports):
-    setup_mclasses(cli)
-    sessions = []
     for port in ports:
-        sessions.append(cli.remove_session(port))
-
-    for sess in sessions:
-        with cli.bess_lock:
-            cli.bess.pause_all()
-            try:
-                for core, pipe in sess.tx_pipelines().items():
-                    for m in pipe.modules:
-                        cli.bess.destroy_module(m.name)
-
-                for core, pipe in sess.rx_pipelines().items():
-                    for m in pipe.modules:
-                        cli.bess.destroy_module(m.name)
-                    cli.bess.destroy_worker(core)
-
-                cli.bess.destroy_port(sess.port())
-            finally:
-                cli.bess.resume_all()
+        _stop(cli, port)
