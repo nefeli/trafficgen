@@ -36,8 +36,8 @@ class TrafficSpec(object):
         self.loss_rate = loss_rate
         self.latency = latency
         self.pps = pps
-        self.mbps = None
-        if latency:
+        self.mbps = mbps
+        if latency and self.mbps is None:
             self.mbps = 100
         self.src_mac = src_mac
         self.dst_mac = dst_mac
@@ -202,15 +202,16 @@ class Session(object):
             return
 
         delta_t = self.__now - self.__last_check
-        delta_pps = self.__curr_stats.inc.packets - \
-                    self.__last_stats.inc.packets
-        pps = delta_pps / delta_t
-        thresh = self.__current_pps * (1 - self.__spec.loss_rate)
-        if pps < thresh:
-            # try sending at the average rate
-            self.__current_pps += pps
-            self.__current_pps /= 2
-        elif pps > thresh:
+        pkts_in = self.__curr_stats.inc.packets - self.__last_stats.inc.packets
+        pkts_out = self.__curr_stats.out.packets - self.__last_stats.out.packets
+        try:
+            loss = ((pkts_out - pkts_in) * 100.0) / pkts_out
+        except ZeroDivisionError:
+            loss = 0.0
+
+        if loss > self.__spec.loss_rate:
+            self.__current_pps *= pkts_in / float(pkts_out)
+        else:
             self.__current_pps *= ADJUST_FACTOR
 
         num_cores = len(self.__tx_pipelines.keys())
