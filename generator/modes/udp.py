@@ -34,7 +34,7 @@ class UdpMode(object):
         return self.__str__()
 
     @staticmethod
-    def setup_pipeline(cli, port, spec):
+    def setup_pipeline(cli, port, spec, qid):
         setup_mclasses(cli, globals())
         if spec.imix:
             pkt_templates = [
@@ -55,26 +55,20 @@ class UdpMode(object):
 
         num_flows = spec.num_flows
 
-        tx_pipes = dict()
-        rx_pipes = dict()
+        # Setup tx pipeline
+        tx_pipe = Pipeline([
+            Source(),
+            Rewrite(templates=pkt_templates),
+            RandomUpdate(fields=[{'offset': 30,
+                                   'size': 4,
+                                   'min': 0x0a000001,
+                                   'max': 0x0a000001 + num_flows - 1}]),
+            IPChecksum(),
+            Timestamp(),
+            QueueOut(port=port, qid=qid)
+        ])
 
-        for i, core in enumerate(spec.cores):
-            # Setup tx pipeline
-            tx_pipe = [
-                Source(),
-                Rewrite(templates=pkt_templates),
-                RandomUpdate(fields=[{'offset': 30,
-                                       'size': 4,
-                                       'min': 0x0a000001,
-                                       'max': 0x0a000001 + num_flows - 1}]),
-                IPChecksum(),
-                Timestamp(),
-                QueueOut(port=port, qid=i)
-            ]
-            tx_pipes[core] = Pipeline(tx_pipe)
+        # Setup rx pipeline
+        rx_pipe = Pipeline([QueueInc(port=port, qid=qid), Measure(), Sink()])
 
-            # Setup rx pipeline
-            rx_pipe = [QueueInc(port=port, qid=i), Measure(), Sink()]
-            rx_pipes[core] = Pipeline(rx_pipe)
-
-        return (tx_pipes, rx_pipes)
+        return (tx_pipe, rx_pipe)

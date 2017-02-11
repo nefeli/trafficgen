@@ -24,7 +24,7 @@ class HttpMode(object):
             return self.__str__()
 
     @staticmethod
-    def setup_pipeline(cli, port, spec):
+    def setup_pipeline(cli, port, spec, qid):
         setup_mclasses(cli, globals())
         SEQNO = 12345
         PORT_HTTP = 80
@@ -37,9 +37,6 @@ class HttpMode(object):
         pkt_headers = eth/ip/tcp
         pkt_template = str(eth/ip/tcp/payload)
 
-        tx_pipes = dict()
-        rx_pipes = dict()
-
         num_cores = len(spec.cores)
         flows_per_core = spec.num_flows / num_cores
         if spec.pps is not None:
@@ -47,26 +44,23 @@ class HttpMode(object):
         else:
             pps_per_core = 5e6
 
-        for i, core in enumerate(spec.cores):
-            # Setup tx pipeline
-            tx_pipe = [
-                FlowGen(template=pkt_template, pps=pps_per_core,
-                        flow_rate=flows_per_core, flow_duration=5,
-                        arrival='uniform', duration='uniform',
-                        quick_rampup=False),
-                RandomUpdate(fields=[{'offset': len(pkt_headers)  + len(payload_prefix),
-                             'size': 1, 'min': 97, 'max': 122}]),
-                RandomUpdate(fields=[{'offset': len(pkt_headers)  + \
-                                                len(payload_prefix) + 1,
-                                      'size': 1, 'min': 97, 'max': 122}]),
-                IPChecksum(),
-                Timestamp(),
-                QueueOut(port=port, qid=i)
-            ]
-            tx_pipes[core] = Pipeline(tx_pipe)
+        # Setup tx pipeline
+        tx_pipe = Pipeline([
+            FlowGen(template=pkt_template, pps=pps_per_core,
+                    flow_rate=flows_per_core, flow_duration=5,
+                    arrival='uniform', duration='uniform',
+                    quick_rampup=False),
+            RandomUpdate(fields=[{'offset': len(pkt_headers)  + len(payload_prefix),
+                         'size': 1, 'min': 97, 'max': 122}]),
+            RandomUpdate(fields=[{'offset': len(pkt_headers)  + \
+                                            len(payload_prefix) + 1,
+                                  'size': 1, 'min': 97, 'max': 122}]),
+            IPChecksum(),
+            Timestamp(),
+            QueueOut(port=port, qid=qid)
+        ])
 
-            # Setup rx pipeline
-            rx_pipe = [QueueInc(port=port, qid=i), Measure(), Sink()]
-            rx_pipes[core] = Pipeline(rx_pipe)
+        # Setup rx pipeline
+        rx_pipe = Pipeline([QueueInc(port=port, qid=qid), Measure(), Sink()])
 
-        return (tx_pipes, rx_pipes)
+        return (tx_pipe, rx_pipe)

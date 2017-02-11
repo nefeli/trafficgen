@@ -35,7 +35,7 @@ class FlowGenMode(object):
             return self.__str__()
 
     @staticmethod
-    def setup_pipeline(cli, port, spec):
+    def setup_pipeline(cli, port, spec, qid):
         setup_mclasses(cli, globals())
         eth = scapy.Ether(src=spec.src_mac, dst=spec.dst_mac)
         ip = scapy.IP(src=spec.src_ip, dst=spec.dst_ip)
@@ -46,9 +46,6 @@ class FlowGenMode(object):
         if spec.flow_rate is None:
             spec.flow_rate = spec.num_flows / spec.flow_duration
 
-        tx_pipes = dict()
-        rx_pipes = dict()
-
         num_cores = len(spec.cores)
         flows_per_core = spec.num_flows / num_cores
 
@@ -57,21 +54,18 @@ class FlowGenMode(object):
         else:
             pps_per_core = 5e6
 
-        for i, core in enumerate(spec.cores):
-            # Setup tx pipeline
-            tx_pipe = [
-                FlowGen(template=DEFAULT_TEMPLATE, pps=pps_per_core,
-                        flow_rate=flows_per_core,
-                        flow_duration=spec.flow_duration, arrival=spec.arrival,
-                        duration=spec.duration, quick_rampup=True),
-                IPChecksum(),
-                Timestamp(),
-                QueueOut(port=port, qid=i)
-            ]
-            tx_pipes[core] = Pipeline(tx_pipe)
+        # Setup tx pipeline
+        tx_pipe = Pipeline([
+            FlowGen(template=DEFAULT_TEMPLATE, pps=pps_per_core,
+                    flow_rate=flows_per_core,
+                    flow_duration=spec.flow_duration, arrival=spec.arrival,
+                    duration=spec.duration, quick_rampup=True),
+            IPChecksum(),
+            Timestamp(),
+            QueueOut(port=port, qid=qid)
+        ])
 
-            # Setup rx pipeline
-            rx_pipe = [QueueInc(port=port, qid=i), Measure(), Sink()]
-            rx_pipes[core] = Pipeline(rx_pipe)
+        # Setup rx pipeline
+        rx_pipe = Pipeline([QueueInc(port=port, qid=qid), Measure(), Sink()])
 
-        return (tx_pipes, rx_pipes)
+        return (tx_pipe, rx_pipe)

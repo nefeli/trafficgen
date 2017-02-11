@@ -448,16 +448,18 @@ def start(cli, port, mode, spec):
     else:
         ts = tmode.Spec(src_mac=ret.mac_addr, cores=cores)
 
+    tx_pipes = dict()
+    rx_pipes = dict()
+
     with cli.bess_lock:
         cli.bess.pause_all()
-        for core in cores:
+        for i, core in enumerate(cores):
             cli.bess.add_worker(wid=core, core=core)
-        tx_pipes, rx_pipes = tmode.setup_pipeline(cli, port, spec=ts)
-        cli.bess.resume_all()
+            tx_pipe, rx_pipe = tmode.setup_pipeline(cli, port, ts, i)
+            tx_pipes[core] = tx_pipe
+            rx_pipes[core] = rx_pipe
 
-        # Setup rate limiting, pin pipelines to cores, and connect tx pipelines
-        cli.bess.pause_all()
-        for core, tx_pipe in tx_pipes.items():
+            # Setup rate limiting, pin pipelines to cores, connect tx pipelines
             src = tx_pipe.modules[0]
             if ts.mbps is not None:
                 bps_per_core = long(1e6 * ts.mbps / num_cores)
@@ -475,8 +477,7 @@ def start(cli, port, mode, spec):
             tx_pipe.tc = rl_name
             _connect_pipeline(cli, tx_pipe.modules)
 
-        # Connect and pin rx pipelines
-        for core, rx_pipe in rx_pipes.items():
+            # Connect and pin rx pipelines
             cli.bess.attach_task(rx_pipe.modules[0].name, 0, wid=core)
             _connect_pipeline(cli, rx_pipe.modules)
         cli.bess.resume_all()
