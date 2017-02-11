@@ -1,7 +1,7 @@
 import scapy.all as scapy
 
 from generator.common import TrafficSpec, Pipeline
-from generator.modes import setup_mclasses, create_rate_limit_tree
+from generator.modes import setup_mclasses
 
 class HttpMode(object):
     name = 'http'
@@ -47,28 +47,13 @@ class HttpMode(object):
         else:
             pps_per_core = 5e6
 
-        if spec.mbps is not None:
-            bps_per_core = long(1e6 * spec.mbps / num_cores)
-
-        cli.bess.pause_all()
         for i, core in enumerate(spec.cores):
-            cli.bess.add_worker(wid=core, core=core)
-
-            src = FlowGen(template=pkt_template, pps=pps_per_core,
-                         flow_rate=flows_per_core, flow_duration=5,
-                         arrival='uniform', duration='uniform', quick_rampup=False)
-            if spec.mbps is not None:
-                rr_name, rl_name, leaf_name = create_rate_limit_tree(cli,
-                                                                      core,
-                                                                      'bit',
-                                                                      bps_per_core)
-                cli.bess.attach_task(src.name, tc=leaf_name)
-            else:
-                cli.bess.attach_task(src.name, 0, wid=core)
-
             # Setup tx pipeline
             tx_pipe = [
-                src,
+                FlowGen(template=pkt_template, pps=pps_per_core,
+                        flow_rate=flows_per_core, flow_duration=5,
+                        arrival='uniform', duration='uniform',
+                        quick_rampup=False),
                 RandomUpdate(fields=[{'offset': len(pkt_headers)  + len(payload_prefix),
                              'size': 1, 'min': 97, 'max': 122}]),
                 RandomUpdate(fields=[{'offset': len(pkt_headers)  + \
@@ -82,8 +67,6 @@ class HttpMode(object):
 
             # Setup rx pipeline
             rx_pipe = [QueueInc(port=port, qid=i), Measure(), Sink()]
-            cli.bess.attach_task(rx_pipe[0].name, 0, wid=core)
             rx_pipes[core] = Pipeline(rx_pipe)
-        cli.bess.resume_all()
 
         return (tx_pipes, rx_pipes)

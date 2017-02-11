@@ -1,7 +1,7 @@
 import scapy.all as scapy
 
 from generator.common import TrafficSpec, Pipeline
-from generator.modes import setup_mclasses, create_rate_limit_tree
+from generator.modes import setup_mclasses
 
 def _build_pkt(spec, size):
     eth = scapy.Ether(src=spec.src_mac, dst=spec.dst_mac)
@@ -58,38 +58,10 @@ class UdpMode(object):
         tx_pipes = dict()
         rx_pipes = dict()
 
-        cli.bess.pause_all()
-
-        num_cores = len(spec.cores)
-        if spec.mbps is not None:
-            bps_per_core = long(1e6 * spec.mbps / num_cores)
-        elif spec.pps is not None:
-            pps_per_core = long(spec.pps / num_cores)
-
         for i, core in enumerate(spec.cores):
-            cli.bess.add_worker(wid=core, core=core)
-            src = Source()
-            if spec.mbps is not None:
-                rr_name, rl_name, leaf_name = create_rate_limit_tree(cli,
-                                                                      core,
-                                                                      'bit',
-                                                                      bps_per_core)
-                cli.bess.attach_task(src.name, tc=leaf_name)
-            elif spec.pps is not None:
-                rr_name, rl_name, leaf_name = create_rate_limit_tree(cli,
-                                                                      core,
-                                                                      'packet',
-                                                                      pps_per_core)
-                cli.bess.attach_task(src.name, tc=leaf_name)
-            else:
-                rr_name = None
-                rl_name = None
-                leaf_name = None
-                cli.bess.attach_task(src.name, 0, wid=core)
-
             # Setup tx pipeline
             tx_pipe = [
-                src,
+                Source(),
                 Rewrite(templates=pkt_templates),
                 RandomUpdate(fields=[{'offset': 30,
                                        'size': 4,
@@ -99,13 +71,10 @@ class UdpMode(object):
                 Timestamp(),
                 QueueOut(port=port, qid=i)
             ]
-            tx_pipes[core] = Pipeline(tx_pipe, rl_name)
+            tx_pipes[core] = Pipeline(tx_pipe)
 
             # Setup rx pipeline
             rx_pipe = [QueueInc(port=port, qid=i), Measure(), Sink()]
-            cli.bess.attach_task(rx_pipe[0].name, 0, wid=core)
             rx_pipes[core] = Pipeline(rx_pipe)
-
-        cli.bess.resume_all()
 
         return (tx_pipes, rx_pipes)

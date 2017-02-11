@@ -370,14 +370,22 @@ def monitor_port_all(cli, ports):
 
 
 def _connect_pipeline(cli, pipe):
-    with cli.bess_lock:
-        cli.bess.pause_all()
-        for i in range(len(pipe)):
-            u = pipe[i]
-            if i < len(pipe) - 1:
-                v =  pipe[i + 1]
-                u.connect(v)
-        cli.bess.resume_all()
+    for i in range(len(pipe)):
+        u = pipe[i]
+        if i < len(pipe) - 1:
+            v =  pipe[i + 1]
+            u.connect(v)
+
+
+def _create_rate_limit_tree(cli, wid, resource, limit):
+    rr_name = 'rr_w%d' % (wid,)
+    rl_name = 'rl_pps_w%d' % (wid,)
+    leaf_name = 'bit_leaf_w%d' % (wid,)
+    cli.bess.add_tc(rr_name, wid=wid, policy='round_robin', priority=0)
+    cli.bess.add_tc(rl_name, parent=rr_name, policy='rate_limit',
+                    resource=resource, limit={resource: limit})
+    cli.bess.add_tc(leaf_name, policy='leaf', parent=rl_name)
+    return (rr_name, rl_name, leaf_name)
 
 
 def _create_port_args(cli, port_id, num_cores):
@@ -439,14 +447,39 @@ def start(cli, port, mode, spec):
         ts = tmode.Spec(cores=cores, **spec)
     else:
         ts = tmode.Spec(src_mac=ret.mac_addr, cores=cores)
-    tx_pipes, rx_pipes = tmode.setup_pipeline(cli, port, spec=ts)
 
-    # Connect the pipelines
-    for core, tx_pipe in tx_pipes.items():
-        _connect_pipeline(cli, tx_pipe.modules)
+    with cli.bess_lock:
+        cli.bess.pause_all()
+        for core in cores:
+            cli.bess.add_worker(wid=core, core=core)
+        tx_pipes, rx_pipes = tmode.setup_pipeline(cli, port, spec=ts)
+        cli.bess.resume_all()
 
-    for core, rx_pipe in rx_pipes.items():
-        _connect_pipeline(cli, rx_pipe.modules)
+        # Setup rate limiting, pin pipelines to cores, and connect tx pipelines
+        cli.bess.pause_all()
+        for core, tx_pipe in tx_pipes.items():
+            src = tx_pipe.modules[0]
+            if ts.mbps is not None:
+                bps_per_core = long(1e6 * ts.mbps / num_cores)
+                rr_name, rl_name, leaf_name = \
+                    _create_rate_limit_tree(cli, core, 'bit', bps_per_core)
+                cli.bess.attach_task(src.name, tc=leaf_name)
+            elif ts.pps is not None:
+                pps_per_core = long(ts.pps / num_cores)
+                rr_name, rl_name, leaf_name = \
+                    _create_rate_limit_tree(cli, core, 'packet', pps_per_core)
+                cli.bess.attach_task(src.name, tc=leaf_name)
+            else:
+                rr_name, rl_name, leaf_name = None, None, None
+                cli.bess.attach_task(src.name, 0, wid=core)
+            tx_pipe.tc = rl_name
+            _connect_pipeline(cli, tx_pipe.modules)
+
+        # Connect and pin rx pipelines
+        for core, rx_pipe in rx_pipes.items():
+            cli.bess.attach_task(rx_pipe.modules[0].name, 0, wid=core)
+            _connect_pipeline(cli, rx_pipe.modules)
+        cli.bess.resume_all()
 
     cli.add_session(Session(port, ts, mode, tx_pipes, rx_pipes))
 
