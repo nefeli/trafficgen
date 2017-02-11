@@ -23,48 +23,9 @@ import commands as bess_commands
 from module import *
 
 from common import *
+import modes
 
 available_cores = list(range(multiprocessing.cpu_count()))
-
-@staticmethod
-def _choose_arg(arg, kwargs):
-    if kwargs:
-        if arg:
-            raise TypeError('You cannot specify both arg and keyword args')
-
-        for key in kwargs:
-            if isinstance(kwargs[key], (Module,)):
-                kwargs[key] = kwargs[key].name
-
-        return kwargs
-
-    if isinstance(arg, (Module,)):
-        return arg.name
-    else:
-        return arg
-
-
-def setup_mclasses(cli):
-    MCLASSES = [
-        'FlowGen',
-        'IPChecksum',
-        'Measure',
-        'QueueInc',
-        'QueueOut',
-        'RandomUpdate',
-        'Rewrite',
-        'RoundRobin',
-        'Source',
-        'Sink',
-        'Timestamp',
-        'Update',
-    ]
-    for name in MCLASSES:
-        if name in globals():
-            break
-        globals()[name] = type(str(name), (Module,), {'bess': cli.bess,
-                               'choose_arg': _choose_arg})
-
 
 def get_var_attrs(cli, var_token, partial_word):
     var_type = None
@@ -235,6 +196,7 @@ def _show_config(cli, port):
     cli.fout.write('Port %s\n' % (port,))
     divider = '-'*(4 + len(port)) + '\n'
     cli.fout.write(divider)
+    cli.fout.write('mode: %23s\n' % (sess.mode(),))
     cli.fout.write(str(sess.spec()) + '\n')
     cli.fout.write(divider)
 
@@ -418,247 +380,6 @@ def _connect_pipeline(cli, pipe):
         cli.bess.resume_all()
 
 
-def _create_rate_limit_tree(cli, wid, resource, limit):
-    rr_name = 'rr_w%d' % (wid,)
-    rl_name = 'rl_pps_w%d' % (wid,)
-    leaf_name = 'bit_leaf_w%d' % (wid,)
-    cli.bess.add_tc(rr_name, wid=wid, policy='round_robin', priority=0)
-    cli.bess.add_tc(rl_name, parent=rr_name, policy='rate_limit',
-                    resource=resource, limit={resource: limit})
-    cli.bess.add_tc(leaf_name, policy='leaf', parent=rl_name)
-    return (rr_name, rl_name, leaf_name)
-
-
-"""
-TRAFFIC_SPEC:
-    loss_rate -- target percentage of packet loss (default 0.0)
-    pps -- tx rate in pps
-    pkt_size -- packet size
-    num_flows -- number of flows
-    flow_duration -- duration of each flows
-    flow_rate -- flow arrival rate
-    arrival -- distribution of flows (either 'uniform' or 'exponential')
-    duration -- distribution of flow durations (either 'uniform' or 'pareto')
-"""
-def _start_flowgen(cli, port, spec):
-    eth = scapy.Ether(src=spec.src_mac, dst=spec.dst_mac)
-    ip = scapy.IP(src=spec.src_ip, dst=spec.dst_ip)
-    tcp = scapy.TCP(sport=spec.src_port, dport=12345, seq=12345)
-    payload = "meow"
-    DEFAULT_TEMPLATE = str(eth/ip/tcp/payload)
-
-    if spec.flow_rate is None:
-        spec.flow_rate = spec.num_flows / spec.flow_duration
-
-    tx_pipes = dict()
-    rx_pipes = dict()
-
-    num_cores = len(spec.cores)
-    flows_per_core = spec.num_flows / num_cores
-
-    if spec.pps is not None:
-        pps_per_core = spec.pps / num_cores
-    else:
-        pps_per_core = 5e6
-
-    if spec.mbps is not None:
-        bps_per_core = long(1e6 * spec.mbps / num_cores)
-
-
-    cli.bess.pause_all()
-    for i, core in enumerate(spec.cores):
-        cli.bess.add_worker(wid=core, core=core)
-        src = FlowGen(template=DEFAULT_TEMPLATE, pps=pps_per_core,
-                    flow_rate=flows_per_core, flow_duration=spec.flow_duration,
-                    arrival=spec.arrival, duration=spec.duration,
-                    quick_rampup=True)
-        if spec.mbps is not None:
-            rr_name, rl_name, leaf_name = _create_rate_limit_tree(cli,
-                                                                  core,
-                                                                  'bit',
-                                                                  bps_per_core)
-            cli.bess.attach_task(src.name, tc=leaf_name)
-        else:
-            cli.bess.attach_task(src.name, 0, wid=core)
-
-        # Setup tx pipeline
-        tx_pipe = [src, IPChecksum(), Timestamp(), QueueOut(port=port, qid=i)]
-        tx_pipes[core] = Pipeline(tx_pipe)
-
-        # Setup rx pipeline
-        rx_pipe = [QueueInc(port=port, qid=i), Measure(), Sink()]
-        cli.bess.attach_task(rx_pipe[0].name, 0, wid=core)
-        rx_pipes[core] = Pipeline(rx_pipe)
-    cli.bess.resume_all()
-
-    return (tx_pipes, rx_pipes)
-
-
-def _build_pkt(spec, size):
-    eth = scapy.Ether(src=spec.src_mac, dst=spec.dst_mac)
-    ip = scapy.IP(src=spec.src_ip, dst=spec.dst_ip)
-    udp = scapy.UDP(sport=10001, dport=10002, chksum=0)
-    payload = ('hello' + '0123456789' * 200)[:size-len(eth/ip/udp)]
-    pkt = eth/ip/udp/payload
-    return str(pkt)
-
-"""
-TRAFFIC_SPEC:
-    pkt_size -- packet size (default: 60)
-    num_flows -- number of flows (default: 1)
-    imix -- generate imix traffic if non-zero (default: 0)
-    mbps -- max tx rate (default: 0 i.e., unlimited)
-"""
-def _start_udp(cli, port, spec):
-    if spec.imix:
-        pkt_templates = [
-            _build_pkt(spec, 60),
-            _build_pkt(spec, 60),
-            _build_pkt(spec, 60),
-            _build_pkt(spec, 60),
-            _build_pkt(spec, 60),
-            _build_pkt(spec, 60),
-            _build_pkt(spec, 60),
-            _build_pkt(spec, 590),
-            _build_pkt(spec, 590),
-            _build_pkt(spec, 590),
-            _build_pkt(spec, 1514)
-        ]
-    else:
-        pkt_templates = [_build_pkt(spec, spec.pkt_size)]
-
-    num_flows = spec.num_flows
-
-    tx_pipes = dict()
-    rx_pipes = dict()
-
-    cli.bess.pause_all()
-
-    num_cores = len(spec.cores)
-    if spec.mbps is not None:
-        bps_per_core = long(1e6 * spec.mbps / num_cores)
-    elif spec.pps is not None:
-        pps_per_core = long(spec.pps / num_cores)
-
-    for i, core in enumerate(spec.cores):
-        cli.bess.add_worker(wid=core, core=core)
-        src = Source()
-        if spec.mbps is not None:
-            rr_name, rl_name, leaf_name = _create_rate_limit_tree(cli,
-                                                                  core,
-                                                                  'bit',
-                                                                  bps_per_core)
-            cli.bess.attach_task(src.name, tc=leaf_name)
-        elif spec.pps is not None:
-            rr_name, rl_name, leaf_name = _create_rate_limit_tree(cli,
-                                                                  core,
-                                                                  'packet',
-                                                                  pps_per_core)
-            cli.bess.attach_task(src.name, tc=leaf_name)
-        else:
-            rr_name = None
-            rl_name = None
-            leaf_name = None
-            cli.bess.attach_task(src.name, 0, wid=core)
-
-        # Setup tx pipeline
-        tx_pipe = [
-            src,
-            Rewrite(templates=pkt_templates),
-            RandomUpdate(fields=[{'offset': 30,
-                                   'size': 4,
-                                   'min': 0x0a000001,
-                                   'max': 0x0a000001 + num_flows - 1}]),
-            IPChecksum(),
-            Timestamp(),
-            QueueOut(port=port, qid=i)
-        ]
-        tx_pipes[core] = Pipeline(tx_pipe, rl_name)
-
-        # Setup rx pipeline
-        rx_pipe = [QueueInc(port=port, qid=i), Measure(), Sink()]
-        cli.bess.attach_task(rx_pipe[0].name, 0, wid=core)
-        rx_pipes[core] = Pipeline(rx_pipe)
-
-    cli.bess.resume_all()
-
-    return (tx_pipes, rx_pipes)
-
-
-"""
-TRAFFIC_SPEC:
-    num_flows -- number of flows
-    src_mac -- source mac address
-    dst_mac -- destination mac address
-    src_ip -- start of source ip range
-    dst_ip -- start of destination ip range
-    src_port -- port to send http requests from
-    cores -- a list of cores to use (defualt: "0")
-"""
-def _start_http(cli, port, spec):
-    SEQNO = 12345
-    PORT_HTTP = 80
-    eth = scapy.Ether(src=spec.src_mac, dst=spec.dst_mac)
-    ip = scapy.IP(src=spec.src_ip, dst=spec.dst_ip)
-    tcp = scapy.TCP(sport=spec.src_port, dport=PORT_HTTP, seq=SEQNO)
-
-    payload_prefix = 'GET /pub/WWW/TheProject.html HTTP/1.1\r\nHost: www.'
-    payload = payload_prefix + 'aaa.com\r\n\r\n'
-    pkt_headers = eth/ip/tcp
-    pkt_template = str(eth/ip/tcp/payload)
-
-    tx_pipes = dict()
-    rx_pipes = dict()
-
-    num_cores = len(spec.cores)
-    flows_per_core = spec.num_flows / num_cores
-    if spec.pps is not None:
-        pps_per_core = spec.pps / num_cores
-    else:
-        pps_per_core = 5e6
-
-    if spec.mbps is not None:
-        bps_per_core = long(1e6 * spec.mbps / num_cores)
-
-    cli.bess.pause_all()
-    for i, core in enumerate(spec.cores):
-        cli.bess.add_worker(wid=core, core=core)
-
-        src = FlowGen(template=pkt_template, pps=pps_per_core,
-                     flow_rate=flows_per_core, flow_duration=5,
-                     arrival='uniform', duration='uniform', quick_rampup=False)
-        if spec.mbps is not None:
-            rr_name, rl_name, leaf_name = _create_rate_limit_tree(cli,
-                                                                  core,
-                                                                  'bit',
-                                                                  bps_per_core)
-            cli.bess.attach_task(src.name, tc=leaf_name)
-        else:
-            cli.bess.attach_task(src.name, 0, wid=core)
-
-        # Setup tx pipeline
-        tx_pipe = [
-            src,
-            RandomUpdate(fields=[{'offset': len(pkt_headers)  + len(payload_prefix),
-                         'size': 1, 'min': 97, 'max': 122}]),
-            RandomUpdate(fields=[{'offset': len(pkt_headers)  + \
-                                            len(payload_prefix) + 1,
-                                  'size': 1, 'min': 97, 'max': 122}]),
-            IPChecksum(),
-            Timestamp(),
-            QueueOut(port=port, qid=i)
-        ]
-        tx_pipes[core] = Pipeline(tx_pipe)
-
-        # Setup rx pipeline
-        rx_pipe = [QueueInc(port=port, qid=i), Measure(), Sink()]
-        cli.bess.attach_task(rx_pipe[0].name, 0, wid=core)
-        rx_pipes[core] = Pipeline(rx_pipe)
-    cli.bess.resume_all()
-
-    return (tx_pipes, rx_pipes)
-
-
 def _create_port_args(cli, port_id, num_cores):
     args = {'driver': None, 'name': port_id,
             'arg': {'num_inc_q': num_cores, 'num_out_q': num_cores}}
@@ -676,7 +397,6 @@ def _create_port_args(cli, port_id, num_cores):
 @cmd('start PORT MODE [TRAFFIC_SPEC...]', 'Start sending packets on a port')
 def start(cli, port, mode, spec):
     global available_cores
-    setup_mclasses(cli)
     if not isinstance(port, str):
         raise cli.CommandError('Port identifier must be a string')
 
@@ -684,6 +404,7 @@ def start(cli, port, mode, spec):
         bess_commands.warn(cli, 'Port %s is already running.' % (port,),
                            _stop, port)
 
+    # Allocate cores if necessary
     if spec is not None and 'cores' in spec:
         cores = list(map(int, spec.pop('cores').split(' ')))
     else:
@@ -692,6 +413,7 @@ def start(cli, port, mode, spec):
         else:
             raise cli.InternalError('No available cores.')
 
+    # Create the port 
     num_cores = len(cores)
     port_args = _create_port_args(cli, port, num_cores)
     with cli.bess_lock:
@@ -702,35 +424,31 @@ def start(cli, port, mode, spec):
     if spec is not None and 'src_mac' not in spec:
         spec['src_mac'] = ret.mac_addr
 
-    if cli.port_is_running(port):
-        raise cli.CommandError("Port %s is already running" % (port,))
+    # Find traffic mode 
+    tmode = None
+    for x in modes.__dict__:
+        m = modes.__dict__[x] 
+        if getattr(m, 'name', '') == mode:
+            tmode = m
 
-    if mode == 'flowgen':
-        if spec is not None:
-            ts = FlowGenSpec(cores=cores, **spec)
-        else:
-            ts = FlowGenSpec(src_mac=ret.mac_addr, cores=cores)
-        tx_pipes, rx_pipes = _start_flowgen(cli, port, spec=ts)
-    elif mode == 'udp':
-        if spec is not None:
-            ts = UdpSpec(cores=cores, **spec)
-        else:
-            ts = UdpSpec(src_mac=ret.mac_addr, cores=cores)
-        tx_pipes, rx_pipes = _start_udp(cli, port, spec=ts)
-    elif mode == 'http':
-        if spec is not None:
-            ts = HttpSpec(cores=cores, **spec)
-        else:
-            ts = HttpSpec(src_mac=ret.mac_addr, cores=cores)
-        tx_pipes, rx_pipes = _start_http(cli, port, spec=ts)
+    if tmode is None:
+        raise cli.CommandError("Mode %s is invalid" % (mode,))
 
+    # Initialize the pipelines
+    if spec is not None:
+        ts = tmode.Spec(cores=cores, **spec)
+    else:
+        ts = tmode.Spec(src_mac=ret.mac_addr, cores=cores)
+    tx_pipes, rx_pipes = tmode.setup_pipeline(cli, port, spec=ts)
+
+    # Connect the pipelines
     for core, tx_pipe in tx_pipes.items():
         _connect_pipeline(cli, tx_pipe.modules)
 
     for core, rx_pipe in rx_pipes.items():
         _connect_pipeline(cli, rx_pipe.modules)
 
-    cli.add_session(Session(port, ts, tx_pipes, rx_pipes))
+    cli.add_session(Session(port, ts, mode, tx_pipes, rx_pipes))
 
 
 def _stop(cli, port):
