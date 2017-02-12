@@ -21,17 +21,17 @@ class UdpMode(object):
             self.imix = imix
             super(UdpMode.Spec, self).__init__(**kwargs)
 
-    def __str__(self):
-        s = super(UdpMode.Spec, self).__str__() + '\n'
-        attrs = [
-            ('pkt_size', lambda x: str(x)),
-            ('num_flows', lambda x: str(x)),
-            ('imix', lambda x: 'enabled' if x else 'disabled')
-        ]
-        return s + self._attrs_to_str(attrs, 25)
+        def __str__(self):
+            s = super(UdpMode.Spec, self).__str__() + '\n'
+            attrs = [
+                ('pkt_size', lambda x: str(x)),
+                ('num_flows', lambda x: str(x)),
+                ('imix', lambda x: 'enabled' if x else 'disabled')
+            ]
+            return s + self._attrs_to_str(attrs, 25)
 
-    def __repr__(self):
-        return self.__str__()
+        def __repr__(self):
+            return self.__str__()
 
     @staticmethod
     def setup_pipeline(cli, port, spec, qid):
