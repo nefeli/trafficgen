@@ -2,6 +2,8 @@ import os
 import sys
 import time
 
+from module import *
+
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 ADJUST_FACTOR = 1.1
 ADJUST_WINDOW_US = 1e6
@@ -22,6 +24,46 @@ def sleep_us(dur):
     time.sleep(dur / 1e6)
 
 
+@staticmethod
+def _choose_arg(arg, kwargs):
+    if kwargs:
+        if arg:
+            raise TypeError('You cannot specify both arg and keyword args')
+
+        for key in kwargs:
+            if isinstance(kwargs[key], (Module,)):
+                kwargs[key] = kwargs[key].name
+
+        return kwargs
+
+    if isinstance(arg, (Module,)):
+        return arg.name
+    else:
+        return arg
+
+
+def setup_mclasses(cli, globs):
+    MCLASSES = [
+        'FlowGen',
+        'IPChecksum',
+        'Measure',
+        'QueueInc',
+        'QueueOut',
+        'RandomUpdate',
+        'Rewrite',
+        'RoundRobin',
+        'Source',
+        'Sink',
+        'Timestamp',
+        'Update',
+    ]
+    for name in MCLASSES:
+        if name in globals():
+            break
+        globs[name] = type(str(name), (Module,), {'bess': cli.bess,
+                               'choose_arg': _choose_arg})
+
+
 class Pipeline(object):
     def __init__(self, modules, tc=None):
         self.modules = modules
@@ -32,7 +74,8 @@ class TrafficSpec(object):
     def __init__(self, loss_rate=None, pps=None, mbps=None,
                  cores=None, src_mac='02:1e:67:9f:4d:bb',
                  dst_mac='02:1e:67:9f:4d:bb', src_ip='192.168.0.1',
-                 dst_ip='10.0.0.1'):
+                 dst_ip='10.0.0.1', tx_timestamp_offset=0,
+                 rx_timestamp_offset=0):
         self.loss_rate = loss_rate
         self.pps = pps
         self.mbps = mbps
@@ -41,6 +84,8 @@ class TrafficSpec(object):
         self.src_ip = src_ip
         self.dst_ip = dst_ip
         self.cores = cores
+        self.tx_timestamp_offset = tx_timestamp_offset
+        self.rx_timestamp_offset = rx_timestamp_offset
 
 
     """Print attribtues of an object in a two-column table of `width` characters

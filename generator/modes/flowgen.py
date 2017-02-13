@@ -1,7 +1,6 @@
 import scapy.all as scapy
 
-from generator.common import TrafficSpec, Pipeline
-from generator.modes import setup_mclasses
+from generator.common import TrafficSpec, Pipeline, setup_mclasses
 
 class FlowGenMode(object):
     name = 'flowgen'
@@ -60,12 +59,10 @@ class FlowGenMode(object):
                     flow_rate=flows_per_core,
                     flow_duration=spec.flow_duration, arrival=spec.arrival,
                     duration=spec.duration, quick_rampup=True),
-            IPChecksum(),
-            Timestamp(),
-            QueueOut(port=port, qid=qid)
+            IPChecksum()
         ])
 
         # Setup rx pipeline
-        rx_pipe = Pipeline([QueueInc(port=port, qid=qid), Measure(), Sink()])
+        rx_pipe = Pipeline([Sink()])
 
         return (tx_pipe, rx_pipe)
