@@ -1,7 +1,6 @@
 import scapy.all as scapy
 
-from generator.common import TrafficSpec, Pipeline
-from generator.modes import setup_mclasses
+from generator.common import TrafficSpec, Pipeline, setup_mclasses
 
 class HttpMode(object):
     name = 'http'
@@ -55,12 +54,10 @@ class HttpMode(object):
             RandomUpdate(fields=[{'offset': len(pkt_headers)  + \
                                             len(payload_prefix) + 1,
                                   'size': 1, 'min': 97, 'max': 122}]),
-            IPChecksum(),
-            Timestamp(),
-            QueueOut(port=port, qid=qid)
+            IPChecksum()
         ])
 
         # Setup rx pipeline
-        rx_pipe = Pipeline([QueueInc(port=port, qid=qid), Measure(), Sink()])
+        rx_pipe = Pipeline([Sink()])
 
         return (tx_pipe, rx_pipe)

@@ -1,7 +1,6 @@
 import scapy.all as scapy
 
-from generator.common import TrafficSpec, Pipeline
-from generator.modes import setup_mclasses
+from generator.common import TrafficSpec, Pipeline, setup_mclasses
 
 def _build_pkt(spec, size):
     eth = scapy.Ether(src=spec.src_mac, dst=spec.dst_mac)
@@ -63,12 +62,10 @@ class UdpMode(object):
                                    'size': 4,
                                    'min': 0x0a000001,
                                    'max': 0x0a000001 + num_flows - 1}]),
-            IPChecksum(),
-            Timestamp(),
-            QueueOut(port=port, qid=qid)
+            IPChecksum()
         ])
 
         # Setup rx pipeline
-        rx_pipe = Pipeline([QueueInc(port=port, qid=qid), Measure(), Sink()])
+        rx_pipe = Pipeline([Sink()])
 
         return (tx_pipe, rx_pipe)

@@ -404,6 +404,7 @@ def _create_port_args(cli, port_id, num_cores):
 
 @cmd('start PORT MODE [TRAFFIC_SPEC...]', 'Start sending packets on a port')
 def start(cli, port, mode, spec):
+    setup_mclasses(cli, globals())
     global available_cores
     if not isinstance(port, str):
         raise cli.CommandError('Port identifier must be a string')
@@ -456,6 +457,14 @@ def start(cli, port, mode, spec):
         for i, core in enumerate(cores):
             cli.bess.add_worker(wid=core, core=core)
             tx_pipe, rx_pipe = tmode.setup_pipeline(cli, port, ts, i)
+
+            # These modules are required across all pipelines
+            tx_pipe.modules  += [Timestamp(offset=ts.tx_timestamp_offset),
+                                 QueueOut(port=port, qid=i)]
+            rx_pipe.modules = [QueueInc(port=port, qid=i),
+                               Measure(offset=ts.rx_timestamp_offset)] \
+                            + rx_pipe.modules
+
             tx_pipes[core] = tx_pipe
             rx_pipes[core] = rx_pipe
 
