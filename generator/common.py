@@ -7,6 +7,7 @@ from module import *
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 ADJUST_FACTOR = 1.1
 ADJUST_WINDOW_US = 1e6
+MAX_ROUNDS = 15
 
 def time_ms():
     return time.time() * 1e3
@@ -145,6 +146,7 @@ class Session(object):
         self.__tx_pipelines = tx_pipelines
         self.__rx_pipelines = rx_pipelines
         self.__current_pps = spec.pps
+        self.__round = 0
 
     def port(self):
         return self.__port
@@ -175,7 +177,8 @@ class Session(object):
 
     # TODO: allow dynamic tx on mbps
     def adjust_tx_rate(self, cli):
-        if self.__spec.loss_rate is None or self.__spec.pps is None:
+        if self.__spec.loss_rate is None or self.__spec.pps is None \
+           or self.__round == MAX_ROUNDS:
             return
 
         delta_t = self.__now - self.__last_check
@@ -190,6 +193,7 @@ class Session(object):
             self.__current_pps *= pkts_in / float(pkts_out)
         else:
             self.__current_pps *= ADJUST_FACTOR
+        self.__round += 1
 
         num_cores = len(self.__tx_pipelines.keys())
         pps_per_core = self.__current_pps / num_cores
@@ -211,15 +215,13 @@ class Session(object):
         self.__now = now if now is not None else now()
 
     def _get_rtt(self):
-        stats = {'avg': 0, 'med': 0, '99': 0, 'timestamp': 0}
+        stats = {'avg': 0, 'med': 0, '99': 0}
         for core, rx_pipeline in self.__rx_pipelines.items():
             now = rx_pipeline.modules[1].get_summary()
             stats['avg'] += now.latency_avg_ns
             stats['med'] += now.latency_50_ns
             stats['99'] += now.latency_99_ns
-            stats['timestamp'] = now.timestamp
         for k in stats:
-            if k == 'timestamp': continue
             stats[k] /= len(self.__rx_pipelines.keys())
             stats[k] /= 1e3 # convert to us
         return stats

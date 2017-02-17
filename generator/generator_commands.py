@@ -297,6 +297,7 @@ def _monitor_ports(cli, *ports):
                 'out_bytes': stats.out.bytes,
                 'inc_dropped': stats.inc.dropped,
                 'out_dropped': stats.out.dropped,
+                'timestamp': stats.timestamp,
             }
         except:
             ret = {
@@ -306,10 +307,11 @@ def _monitor_ports(cli, *ports):
                 'out_bytes': 0,
                 'inc_dropped': 0,
                 'out_dropped': 0,
+                'timestamp': time.time(),
             }
         rtt_now = sess.curr_rtt()
         if rtt_now is None:
-            rtt_now = {'avg': 0, 'med': 0, '99': 0, 'timestamp': stats.timestamp}
+            rtt_now = {'avg': 0, 'med': 0, '99': 0}
         ret.update(rtt_now)
         return ret
 
@@ -383,7 +385,8 @@ def _create_rate_limit_tree(cli, wid, resource, limit):
     leaf_name = 'bit_leaf_w%d' % (wid,)
     cli.bess.add_tc(rr_name, wid=wid, policy='round_robin', priority=0)
     cli.bess.add_tc(rl_name, parent=rr_name, policy='rate_limit',
-                    resource=resource, limit={resource: limit})
+                    resource=resource, limit={resource: limit},
+                    max_burst={resource: 16})
     cli.bess.add_tc(leaf_name, policy='leaf', parent=rl_name)
     return (rr_name, rl_name, leaf_name)
 
