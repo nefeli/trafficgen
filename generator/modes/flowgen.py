@@ -34,7 +34,7 @@ class FlowGenMode(object):
             return self.__str__()
 
     @staticmethod
-    def setup_pipeline(cli, port, spec, qid):
+    def setup_tx_pipeline(cli, port, spec):
         setup_mclasses(cli, globals())
         eth = scapy.Ether(src=spec.src_mac, dst=spec.dst_mac)
         ip = scapy.IP(src=spec.src_ip, dst=spec.dst_ip)
@@ -45,7 +45,7 @@ class FlowGenMode(object):
         if spec.flow_rate is None:
             spec.flow_rate = spec.num_flows / spec.flow_duration
 
-        num_cores = len(spec.cores)
+        num_cores = len(spec.tx_cores)
         flows_per_core = spec.num_flows / num_cores
 
         if spec.pps is not None:
@@ -54,7 +54,7 @@ class FlowGenMode(object):
             pps_per_core = 5e6
 
         # Setup tx pipeline
-        tx_pipe = Pipeline([
+        return Pipeline([
             FlowGen(template=DEFAULT_TEMPLATE, pps=pps_per_core,
                     flow_rate=flows_per_core,
                     flow_duration=spec.flow_duration, arrival=spec.arrival,
@@ -62,7 +62,7 @@ class FlowGenMode(object):
             IPChecksum()
         ])
 
-        # Setup rx pipeline
-        rx_pipe = Pipeline([Sink()])
-
-        return (tx_pipe, rx_pipe)
+    @staticmethod
+    def setup_rx_pipeline(cli, port, spec):
+        setup_mclasses(cli, globals())
+        return Pipeline([Sink()])

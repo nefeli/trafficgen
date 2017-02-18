@@ -384,10 +384,10 @@ def _create_rate_limit_tree(cli, wid, resource, limit):
     rl_name = 'rl_pps_w%d' % (wid,)
     leaf_name = 'bit_leaf_w%d' % (wid,)
     cli.bess.add_tc(rr_name, wid=wid, policy='round_robin', priority=0)
-    cli.bess.add_tc(rl_name, parent=rr_name, policy='rate_limit',
+    cli.bess.add_tc(rl_name, wid=wid, parent=rr_name, policy='rate_limit',
                     resource=resource, limit={resource: limit},
                     max_burst={resource: 16})
-    cli.bess.add_tc(leaf_name, policy='leaf', parent=rl_name)
+    cli.bess.add_tc(leaf_name, wid=wid, policy='leaf', parent=rl_name)
     return (rr_name, rl_name, leaf_name)
 
 
@@ -417,17 +417,30 @@ def start(cli, port, mode, spec):
                            _stop, port)
 
     # Allocate cores if necessary
-    if spec is not None and 'cores' in spec:
-        cores = list(map(int, spec.pop('cores').split(' ')))
-    else:
-        if len(available_cores) > 0:
-            cores = [available_cores.pop(0)]
+    if spec is not None:
+        if 'tx_cores' in spec:
+            tx_cores = list(map(int, spec.pop('tx_cores').split(' ')))
         else:
-            raise cli.InternalError('No available cores.')
+            if len(available_cores) > 0:
+                tx_cores = [available_cores.pop(0)]
+            else:
+                raise cli.InternalError('No available cores.')
+
+        if 'rx_cores' in spec:
+            rx_cores = list(map(int, spec.pop('rx_cores').split(' ')))
+        elif 'rx_cores' not in spec and 'tx_cores' not in spec:
+            rx_cores = tx_cores
+        else:
+            if len(available_cores) > 0:
+                rx_cores = [available_cores.pop(0)]
+            else:
+                raise cli.InternalError('No available cores.')
 
     # Create the port 
-    num_cores = len(cores)
-    port_args = _create_port_args(cli, port, num_cores)
+    num_tx_cores = len(tx_cores)
+    num_rx_cores = len(rx_cores)
+    num_cores = num_tx_cores + num_rx_cores
+    port_args = _create_port_args(cli, port, max(num_tx_cores, num_rx_cores))
     with cli.bess_lock:
         ret = cli.bess.create_port(port_args['driver'], port_args['name'],
                                    arg=port_args['arg'])
@@ -448,38 +461,36 @@ def start(cli, port, mode, spec):
 
     # Initialize the pipelines
     if spec is not None:
-        ts = tmode.Spec(cores=cores, **spec)
+        ts = tmode.Spec(tx_cores=tx_cores, rx_cores=rx_cores, **spec)
     else:
-        ts = tmode.Spec(src_mac=ret.mac_addr, cores=cores)
+        ts = tmode.Spec(src_mac=ret.mac_addr, tx_cores=tx_cores,
+                        rx_cores=rx_cores)
 
     tx_pipes = dict()
     rx_pipes = dict()
 
     with cli.bess_lock:
         cli.bess.pause_all()
-        for i, core in enumerate(cores):
+
+        # Setup TX pipelines
+        for i, core in enumerate(tx_cores):
             cli.bess.add_worker(wid=core, core=core)
-            tx_pipe, rx_pipe = tmode.setup_pipeline(cli, port, ts, i)
+            tx_pipe = tmode.setup_tx_pipeline(cli, port, ts)
 
             # These modules are required across all pipelines
-            tx_pipe.modules  += [Timestamp(offset=ts.tx_timestamp_offset),
+            tx_pipe.modules += [Timestamp(offset=ts.tx_timestamp_offset),
                                  QueueOut(port=port, qid=i)]
-            rx_pipe.modules = [QueueInc(port=port, qid=i),
-                               Measure(offset=ts.rx_timestamp_offset)] \
-                            + rx_pipe.modules
-
             tx_pipes[core] = tx_pipe
-            rx_pipes[core] = rx_pipe
 
-            # Setup rate limiting, pin pipelines to cores, connect tx pipelines
+            # Setup rate limiting, pin pipelines to cores, connect pipelines
             src = tx_pipe.modules[0]
             if ts.mbps is not None:
-                bps_per_core = long(1e6 * ts.mbps / num_cores)
+                bps_per_core = long(1e6 * ts.mbps / num_tx_cores)
                 rr_name, rl_name, leaf_name = \
                     _create_rate_limit_tree(cli, core, 'bit', bps_per_core)
                 cli.bess.attach_task(src.name, tc=leaf_name)
             elif ts.pps is not None:
-                pps_per_core = long(ts.pps / num_cores)
+                pps_per_core = long(ts.pps / num_tx_cores)
                 rr_name, rl_name, leaf_name = \
                     _create_rate_limit_tree(cli, core, 'packet', pps_per_core)
                 cli.bess.attach_task(src.name, tc=leaf_name)
@@ -489,9 +500,45 @@ def start(cli, port, mode, spec):
             tx_pipe.tc = rl_name
             _connect_pipeline(cli, tx_pipe.modules)
 
-            # Connect and pin rx pipelines
-            cli.bess.attach_task(rx_pipe.modules[0].name, 0, wid=core)
+        # Setup RX pipelines
+        rx_qids = dict()
+        if num_rx_cores < num_tx_cores:
+            for i, core in enumerate(rx_cores):
+                rx_qids[core] = [i]
+
+            # round-robin remaining queues across rx_cores
+            for i in range(len(tx_cores[num_rx_cores:])):
+                core = rx_cores[(num_rx_cores + i) % num_rx_cores]
+                rx_qids[core].append(num_rx_cores + i)
+
+        for i, core in enumerate(rx_cores):
+            if core not in tx_cores:
+                cli.bess.add_worker(wid=core, core=core)
+            rx_pipe = tmode.setup_rx_pipeline(cli, port, ts)
+
+            queues = []
+            if core in rx_qids and len(rx_qids[core]) > 1:
+                m = Merge()
+                front = [m]
+                for j, qid in enumerate(rx_qids[core]):
+                    q = QueueInc(port=port, qid=qid)
+                    queues.append(q)
+                    cli.bess.attach_task(q.name, 0, wid=core)
+                    q.connect(m, igate=j)
+            else:
+                front = [QueueInc(port=port, qid=i)]
+
+            front += [Measure(offset=ts.rx_timestamp_offset)]
+            rx_pipe.modules = front + rx_pipe.modules
+
+            rx_pipes[core] = rx_pipe
+
+            # Connect pipelines and pin to cores
             _connect_pipeline(cli, rx_pipe.modules)
+
+            # TODO: maintain queues in a separate structure
+            rx_pipe.modules += queues
+
         cli.bess.resume_all()
 
     cli.add_session(Session(port, ts, mode, tx_pipes, rx_pipes))
@@ -500,18 +547,24 @@ def start(cli, port, mode, spec):
 def _stop(cli, port):
     global available_cores
     sess = cli.remove_session(port)
-    available_cores = list(sorted(available_cores + sess.spec().cores))
+    reclaimed_cores = sess.spec().tx_cores + sess.spec().rx_cores
+    available_cores = list(sorted(available_cores + reclaimed_cores))
     with cli.bess_lock:
         cli.bess.pause_all()
         try:
+            workers = set()
             for core, pipe in sess.tx_pipelines().items():
                 for m in pipe.modules:
                     cli.bess.destroy_module(m.name)
+                workers.add(core)
 
             for core, pipe in sess.rx_pipelines().items():
                 for m in pipe.modules:
                     cli.bess.destroy_module(m.name)
-                cli.bess.destroy_worker(core)
+                workers.add(core)
+
+            for worker in workers:
+                cli.bess.destroy_worker(worker)
 
             cli.bess.destroy_port(sess.port())
         finally:

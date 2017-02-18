@@ -23,7 +23,7 @@ class HttpMode(object):
             return self.__str__()
 
     @staticmethod
-    def setup_pipeline(cli, port, spec, qid):
+    def setup_tx_pipeline(cli, port, spec):
         setup_mclasses(cli, globals())
         SEQNO = 12345
         PORT_HTTP = 80
@@ -36,15 +36,14 @@ class HttpMode(object):
         pkt_headers = eth/ip/tcp
         pkt_template = str(eth/ip/tcp/payload)
 
-        num_cores = len(spec.cores)
+        num_cores = len(spec.tx_cores)
         flows_per_core = spec.num_flows / num_cores
         if spec.pps is not None:
             pps_per_core = spec.pps / num_cores
         else:
             pps_per_core = 5e6
 
-        # Setup tx pipeline
-        tx_pipe = Pipeline([
+        return Pipeline([
             FlowGen(template=pkt_template, pps=pps_per_core,
                     flow_rate=flows_per_core, flow_duration=5,
                     arrival='uniform', duration='uniform',
@@ -57,7 +56,7 @@ class HttpMode(object):
             IPChecksum()
         ])
 
-        # Setup rx pipeline
-        rx_pipe = Pipeline([Sink()])
-
-        return (tx_pipe, rx_pipe)
+    @staticmethod
+    def setup_rx_pipeline(cli, port, spec):
+        setup_mclasses(cli, globals())
+        return Pipeline([Sink()])

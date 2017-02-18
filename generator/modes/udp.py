@@ -33,7 +33,7 @@ class UdpMode(object):
             return self.__str__()
 
     @staticmethod
-    def setup_pipeline(cli, port, spec, qid):
+    def setup_tx_pipeline(cli, port, spec):
         setup_mclasses(cli, globals())
         if spec.imix:
             pkt_templates = [
@@ -55,7 +55,7 @@ class UdpMode(object):
         num_flows = spec.num_flows
 
         # Setup tx pipeline
-        tx_pipe = Pipeline([
+        return Pipeline([
             Source(),
             Rewrite(templates=pkt_templates),
             RandomUpdate(fields=[{'offset': 30,
@@ -65,7 +65,7 @@ class UdpMode(object):
             IPChecksum()
         ])
 
-        # Setup rx pipeline
-        rx_pipe = Pipeline([Sink()])
-
-        return (tx_pipe, rx_pipe)
+    @staticmethod
+    def setup_rx_pipeline(cli, port, spec):
+        setup_mclasses(cli, globals())
+        return Pipeline([Sink()])

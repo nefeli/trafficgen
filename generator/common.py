@@ -48,6 +48,7 @@ def setup_mclasses(cli, globs):
         'FlowGen',
         'IPChecksum',
         'Measure',
+        'Merge',
         'QueueInc',
         'QueueOut',
         'RandomUpdate',
@@ -73,7 +74,7 @@ class Pipeline(object):
 
 class TrafficSpec(object):
     def __init__(self, loss_rate=None, pps=None, mbps=None,
-                 cores=None, src_mac='02:1e:67:9f:4d:bb',
+                 tx_cores=None, rx_cores=None, src_mac='02:1e:67:9f:4d:bb',
                  dst_mac='02:1e:67:9f:4d:bb', src_ip='192.168.0.1',
                  dst_ip='10.0.0.1', tx_timestamp_offset=0,
                  rx_timestamp_offset=0):
@@ -84,7 +85,8 @@ class TrafficSpec(object):
         self.dst_mac = dst_mac
         self.src_ip = src_ip
         self.dst_ip = dst_ip
-        self.cores = cores
+        self.tx_cores = tx_cores
+        self.rx_cores = rx_cores
         self.tx_timestamp_offset = tx_timestamp_offset
         self.rx_timestamp_offset = rx_timestamp_offset
 
@@ -115,7 +117,8 @@ class TrafficSpec(object):
             ('dst_mac', lambda x: x),
             ('src_ip', lambda x: x),
             ('dst_ip', lambda x: x),
-            ('cores', lambda x: ','.join(map(str, x)))
+            ('tx_cores', lambda x: ','.join(map(str, x))),
+            ('rx_cores', lambda x: ','.join(map(str, x)))
         ]
         return self._attrs_to_str(attrs, 25)
 
@@ -182,7 +185,11 @@ class Session(object):
             return
 
         delta_t = self.__now - self.__last_check
-        pkts_in = self.__curr_stats.inc.packets - self.__last_stats.inc.packets
+        # Count rx drops, too. We shouldn't penalize the DUT if we can't keep up
+        pkts_in = (self.__curr_stats.inc.packets + \
+                   self.__curr_stats.inc.dropped) - \
+                  (self.__last_stats.inc.packets + \
+                   self.__last_stats.inc.dropped)
         pkts_out = self.__curr_stats.out.packets - self.__last_stats.out.packets
         try:
             loss = ((pkts_out - pkts_in) * 100.0) / pkts_out
@@ -190,7 +197,7 @@ class Session(object):
             loss = 0.0
 
         if loss > self.__spec.loss_rate:
-            self.__current_pps *= pkts_in / float(pkts_out)
+            self.__current_pps /= ADJUST_FACTOR
         else:
             self.__current_pps *= ADJUST_FACTOR
         self.__round += 1
@@ -203,7 +210,7 @@ class Session(object):
                 tx_pipeline.modules[0].update(pps=pps_per_core)
             else:
                 cli.bess.update_tc(tc, resource='packet',
-                               limit={'packet': long(pps_per_core)})
+                                   limit={'packet': long(pps_per_core)})
 
     def update_port_stats(self, cli, now=None):
         if self.__last_stats is not None:
