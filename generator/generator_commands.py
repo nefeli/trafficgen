@@ -435,6 +435,12 @@ def start(cli, port, mode, spec):
                 rx_cores = [available_cores.pop(0)]
             else:
                 raise cli.InternalError('No available cores.')
+    else:
+        if len(available_cores) > 0:
+            tx_cores = [available_cores.pop(0)]
+            rx_cores = tx_cores
+        else:
+            raise cli.InternalError('No available cores.')
 
     # Create the port 
     num_tx_cores = len(tx_cores)
