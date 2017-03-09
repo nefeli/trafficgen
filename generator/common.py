@@ -5,9 +5,9 @@ import time
 from module import *
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
-ADJUST_FACTOR = 1.1
 ADJUST_WINDOW_US = 1e6
-MAX_ROUNDS = 15
+ADJUST_FACTOR = 1.3
+MAX_ROUNDS = 10
 
 def time_ms():
     return time.time() * 1e3
@@ -197,7 +197,8 @@ class Session(object):
             loss = 0.0
 
         if loss > self.__spec.loss_rate:
-            self.__current_pps /= ADJUST_FACTOR
+            self.__current_pps += pkts_in / float(delta_t)
+            self.__current_pps /= 2
         else:
             self.__current_pps *= ADJUST_FACTOR
         self.__round += 1
