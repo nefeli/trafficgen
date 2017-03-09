@@ -27,6 +27,8 @@ import modes
 
 available_cores = list(range(multiprocessing.cpu_count()))
 
+DEFAULT_STATS_CSV = '/tmp/bench.csv'
+
 def get_var_attrs(cli, var_token, partial_word):
     var_type = None
     var_desc = ''
@@ -230,48 +232,63 @@ def reset(cli):
 PortRate = collections.namedtuple('PortRate',
                                   ['inc_packets', 'inc_dropped', 'inc_bytes',
                                    'rtt_avg', 'rtt_med', 'rtt_99',
+                                   'jitter_avg', 'jitter_med', 'jitter_99',
                                    'out_packets', 'out_dropped', 'out_bytes'])
 
 def _monitor_ports(cli, *ports):
-
     def get_delta(old, new):
         sec_diff = new['timestamp'] - old['timestamp']
         return PortRate(
             inc_packets = (new['inc_packets'] - old['inc_packets']) / sec_diff,
             inc_dropped = (new['inc_dropped'] - old['inc_dropped']) / sec_diff,
             inc_bytes = (new['inc_bytes'] - old['inc_bytes']) / sec_diff,
-            rtt_avg = (new['avg'] + old['avg']) / 2,
-            rtt_med = (new['med'] + old['med']) / 2,
-            rtt_99 = (new['99'] + old['99']) / 2,
+            rtt_avg = (new['rtt_avg'] + old['rtt_avg']) / 2,
+            rtt_med = (new['rtt_med'] + old['rtt_med']) / 2,
+            rtt_99 = (new['rtt_99'] + old['rtt_99']) / 2,
+            jitter_avg = (new['jitter_avg'] + old['jitter_avg']) / 2,
+            jitter_med = (new['jitter_med'] + old['jitter_med']) / 2,
+            jitter_99 = (new['jitter_99'] + old['jitter_99']) / 2,
             out_packets = (new['out_packets'] - old['out_packets']) / sec_diff,
             out_dropped = (new['out_dropped'] - old['out_dropped']) / sec_diff,
             out_bytes = (new['out_bytes'] - old['out_bytes']) / sec_diff)
 
     def print_header(timestamp):
         cli.fout.write('\n')
-        cli.fout.write('%-20s%14s%10s%10s%15s%15s%15s       %14s%10s%10s\n' %
+        cli.fout.write('%-20s%14s%10s%10s%15s%15s%15s%15s%15s%15s       %14s%10s%10s\n' %
                        (time.strftime('%X') + str(timestamp % 1)[1:8],
                         'INC     Mbps', 'Mpps', 'dropped',
-                        'avg_rtt (us)', 'med_rtt (us)', '99_rtt (us)',
+                        'Avg RTT (us)', 'Med RTT (us)', '99th RTT (us)',
+                        'Avg Jit (us)', 'Med Jit (us)', '99th Jit (us)',
                         'OUT     Mbps', 'Mpps', 'dropped'))
 
-        cli.fout.write('%s\n' % ('-' * 141))
+        cli.fout.write('%s\n' % ('-' * 186))
 
     def print_footer():
-        cli.fout.write('%s\n' % ('-' * 141))
+        cli.fout.write('%s\n' % ('-' * 186))
 
-    def print_delta(port, delta):
-        cli.fout.write('%-20s%14.1f%10.3f%10d%15.3f%15.3f%15.3f        %14.1f%10.3f%10d\n' %
-                       (port,
-                        (delta.inc_bytes + delta.inc_packets * 24) * 8 / 1e6,
-                        delta.inc_packets / 1e6,
-                        delta.inc_dropped,
-                        delta.rtt_avg,
-                        delta.rtt_med,
-                        delta.rtt_99,
-                        (delta.out_bytes + delta.out_packets * 24) * 8 / 1e6,
-                        delta.out_packets / 1e6,
-                        delta.out_dropped))
+    csv = DEFAULT_STATS_CSV
+
+    def print_delta(port, delta, timestamp):
+        stats = (port,
+                (delta.inc_bytes + delta.inc_packets * 24) * 8 / 1e6,
+                delta.inc_packets / 1e6,
+                delta.inc_dropped,
+                delta.rtt_avg,
+                delta.rtt_med,
+                delta.rtt_99,
+                delta.jitter_avg,
+                delta.jitter_med,
+                delta.jitter_99,
+                (delta.out_bytes + delta.out_packets * 24) * 8 / 1e6,
+                delta.out_packets / 1e6,
+                delta.out_dropped)
+        cli.fout.write('%-20s%14.1f%10.3f%10d%15.3f%15.3f%15.3f%15.3f%15.3f%15.3f        '\
+                       '%14.1f%10.3f%10d\n' % stats)
+
+        with open(csv, 'a+') as f:
+            line = '%s,%s,%.1f,%.3f,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.3f,%d\n'
+            line %= (time.strftime('%X') + str(timestamp % 1)[1:8],) + stats
+            f.write(line)
 
     def get_total(arr):
         total = copy.deepcopy(arr[0])
@@ -279,9 +296,12 @@ def _monitor_ports(cli, *ports):
             total['inc_packets'] += stat['inc_packets']
             total['inc_dropped'] += stat['inc_dropped']
             total['inc_bytes'] += stat['inc_bytes']
-            total['avg'] += stat['avg']
-            total['med'] += stat['med']
-            total['99'] += stat['99']
+            total['rtt_avg'] += stat['rtt_avg']
+            total['rtt_med'] += stat['rtt_med']
+            total['rtt_99'] += stat['rtt_99']
+            total['jitter_avg'] += stat['jitter_avg']
+            total['jitter_med'] += stat['jitter_med']
+            total['jitter_99'] += stat['jitter_99']
             total['out_packets'] += stat['out_packets']
             total['out_dropped'] += stat['out_dropped']
             total['out_bytes'] += stat['out_bytes']
@@ -311,7 +331,8 @@ def _monitor_ports(cli, *ports):
             }
         rtt_now = sess.curr_rtt()
         if rtt_now is None:
-            rtt_now = {'avg': 0, 'med': 0, '99': 0}
+            rtt_now = {'rtt_avg': 0, 'rtt_med': 0, 'rtt_99': 0,
+                       'jitter_avg': 0, 'jitter_med': 0, 'jitter_99': 0}
         ret.update(rtt_now)
         return ret
 
@@ -331,9 +352,23 @@ def _monitor_ports(cli, *ports):
     last = {}
     now = {}
 
-    for port in ports:
-        last[port] = get_all_stats(cli, cli.get_session(port))
+    csv_header = '#' + ','.join(['time', 'port',
+    'inc_mbps', 'inc_mpps', 'inc_dropped',
+    'avg_rtt_us', 'med_rtt_us', '99th_rtt_us',
+    'avg_jit_us', 'med_jit_us', '99th_jit_us',
+    'out_mbps', 'out_mpps', 'out_dropped']) + '\n'
 
+    with open(csv, 'w+') as f:
+        for port in ports:
+            line = '#port ' + port + ': '
+            line += str(cli.get_session(port).spec()).replace('\n', '; ')
+            line = re.sub('\s+', ' ', line) + '\n'
+            f.write(line)
+        f.write(csv_header)
+
+    for port in ports:
+        sess = cli.get_session(port)
+        last[port] = get_all_stats(cli, sess)
     try:
         while True:
             time.sleep(1)
@@ -346,7 +381,7 @@ def _monitor_ports(cli, *ports):
 
             for port in ports:
                 print_delta('%s/%s' % (port, drivers[port]),
-                            get_delta(last[port], now[port]))
+                            get_delta(last[port], now[port]), now[port]['timestamp'])
 
             print_footer()
 

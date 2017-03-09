@@ -30,17 +30,19 @@ localhost:10514 $ start 03:00.0 udp num_flows=10000, pkt_size=60
 
 You can then check how well the DUT is keeping up by running `monitor port`
 which will produce the output below. The `INC` columns indicate the rate of
-return traffic from the DUT along with the average, median and 99th percentile
-round-trip times experienced by packets (reported in microseconds).
+return traffic from the DUT along with the average, median and 99th
+percentile/jitter round-trip times experienced by packets (reported in
+microseconds). `monitor port` also dumps a comma separated form of its output to
+`/tmp/bench.csv`.
 
 ```
 localhost:10514 $ monitor port
 Monitoring ports: 03:00.0 (Send CTRL + c to stop)
 
-14:40:49.469716       INC     Mbps      Mpps   dropped   avg_rtt (us)   med_rtt (us)    99_rtt (us)         OUT     Mbps      Mpps   dropped
----------------------------------------------------------------------------------------------------------------------------------------------
-03:00.0/PMDPort            10128.9    15.070      3582         15.314         14.650         18.200               10134.5    15.081       143
----------------------------------------------------------------------------------------------------------------------------------------------
+14:40:49.469716       INC     Mbps      Mpps   dropped   avg_rtt (us)   med_rtt (us)    99_rtt (us)         avg_jit (us)   med_jit (us)    99_jit (us)         OUT     Mbps      Mpps   dropped
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+03:00.0/PMDPort            10128.9    15.070      3582         15.314         14.650         18.200                0.822          0.650          2.100              10134.5    15.081       143
+-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 ```
 
 Running `show config` will dump the current configuration of all active ports,
