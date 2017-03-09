@@ -28,6 +28,7 @@ import modes
 available_cores = list(range(multiprocessing.cpu_count()))
 
 DEFAULT_STATS_CSV = '/tmp/bench.csv'
+stats_csv = DEFAULT_STATS_CSV
 
 def get_var_attrs(cli, var_token, partial_word):
     var_type = None
@@ -62,6 +63,10 @@ def get_var_attrs(cli, var_token, partial_word):
 
         elif var_token == '[TRAFFIC_SPEC...]':
             var_type = 'map'
+
+        elif var_token == 'CSV':
+            var_type = 'filename'
+            var_desc = 'a path to a csv file'
 
     except socket.error as e:
         if e.errno in [errno.ECONNRESET, errno.EPIPE]:
@@ -236,6 +241,8 @@ PortRate = collections.namedtuple('PortRate',
                                    'out_packets', 'out_dropped', 'out_bytes'])
 
 def _monitor_ports(cli, *ports):
+    global stats_csv
+
     def get_delta(old, new):
         sec_diff = new['timestamp'] - old['timestamp']
         return PortRate(
@@ -266,7 +273,6 @@ def _monitor_ports(cli, *ports):
     def print_footer():
         cli.fout.write('%s\n' % ('-' * 186))
 
-    csv = DEFAULT_STATS_CSV
 
     def print_delta(port, delta, timestamp):
         stats = (port,
@@ -285,7 +291,7 @@ def _monitor_ports(cli, *ports):
         cli.fout.write('%-20s%14.1f%10.3f%10d%15.3f%15.3f%15.3f%15.3f%15.3f%15.3f        '\
                        '%14.1f%10.3f%10d\n' % stats)
 
-        with open(csv, 'a+') as f:
+        with open(stats_csv, 'a+') as f:
             line = '%s,%s,%.1f,%.3f,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.3f,%d\n'
             line %= (time.strftime('%X') + str(timestamp % 1)[1:8],) + stats
             f.write(line)
@@ -358,7 +364,7 @@ def _monitor_ports(cli, *ports):
     'avg_jit_us', 'med_jit_us', '99th_jit_us',
     'out_mbps', 'out_mpps', 'out_dropped']) + '\n'
 
-    with open(csv, 'w+') as f:
+    with open(stats_csv, 'w+') as f:
         for port in ports:
             line = '#port ' + port + ': '
             line += str(cli.get_session(port).spec()).replace('\n', '; ')
@@ -404,6 +410,12 @@ def monitor_port_all(cli):
 @cmd('monitor port PORT...', 'Monitor the current traffic of specified ports')
 def monitor_port_all(cli, ports):
     _monitor_ports(cli, *ports)
+
+
+@cmd('set csv CSV', 'Set the CSV file for stats output')
+def set_csv(cli, csv):
+    global stats_csv
+    stats_csv = csv
 
 
 def _connect_pipeline(cli, pipe):

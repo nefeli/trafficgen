@@ -32,8 +32,9 @@ You can then check how well the DUT is keeping up by running `monitor port`
 which will produce the output below. The `INC` columns indicate the rate of
 return traffic from the DUT along with the average, median and 99th
 percentile/jitter round-trip times experienced by packets (reported in
-microseconds). `monitor port` also dumps a comma separated form of its output to
-`/tmp/bench.csv`.
+microseconds). `monitor port` also dumps a comma separated form of its output
+to `/tmp/bench.csv`. You can change where stats get dumped for future runs by
+running `set csv <PAHT_TO_YOUR_CSV>`.
 
 ```
 localhost:10514 $ monitor port
