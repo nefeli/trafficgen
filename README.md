@@ -55,6 +55,7 @@ show config PORT...                               Show the current confiugration
 reset                                             Reset trafficgen
 monitor port                                      Monitor the current traffic of all ports
 monitor port PORT...                              Monitor the current traffic of specified ports
+set csv CSV                                       Set the CSV file for stats output
 start PORT MODE [TRAFFIC_SPEC...]                 Start sending packets on a port
 stop PORT...                                      Stop sending packets on a set of ports
 ```

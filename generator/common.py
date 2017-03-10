@@ -5,9 +5,9 @@ import time
 from module import *
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
-ADJUST_FACTOR = 1.1
 ADJUST_WINDOW_US = 1e6
-MAX_ROUNDS = 15
+ADJUST_FACTOR = 1.3
+MAX_ROUNDS = 10
 
 def time_ms():
     return time.time() * 1e3
@@ -197,7 +197,8 @@ class Session(object):
             loss = 0.0
 
         if loss > self.__spec.loss_rate:
-            self.__current_pps /= ADJUST_FACTOR
+            self.__current_pps += pkts_in / float(delta_t)
+            self.__current_pps /= 2
         else:
             self.__current_pps *= ADJUST_FACTOR
         self.__round += 1
@@ -222,12 +223,16 @@ class Session(object):
         self.__now = now if now is not None else now()
 
     def _get_rtt(self):
-        stats = {'avg': 0, 'med': 0, '99': 0}
+        stats = {'rtt_avg': 0, 'rtt_med': 0, 'rtt_99': 0,
+                 'jitter_avg': 0, 'jitter_med': 0, 'jitter_99': 0}
         for core, rx_pipeline in self.__rx_pipelines.items():
             now = rx_pipeline.modules[1].get_summary()
-            stats['avg'] += now.latency_avg_ns
-            stats['med'] += now.latency_50_ns
-            stats['99'] += now.latency_99_ns
+            stats['rtt_avg'] += now.latency_avg_ns
+            stats['rtt_med'] += now.latency_50_ns
+            stats['rtt_99'] += now.latency_99_ns
+            stats['jitter_avg'] += now.jitter_avg_ns
+            stats['jitter_med'] += now.jitter_50_ns
+            stats['jitter_99'] += now.jitter_99_ns
         for k in stats:
             stats[k] /= len(self.__rx_pipelines.keys())
             stats[k] /= 1e3 # convert to us
