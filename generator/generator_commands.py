@@ -383,7 +383,7 @@ def _monitor_ports(cli, *ports):
     for port in ports:
         sess = cli.get_session(port)
         last[port] = get_all_stats(cli, sess, port)
-        print(port, last[port])
+
     try:
         while True:
             time.sleep(1)
@@ -510,10 +510,13 @@ def start(cli, tx_port, rx_port, mode, spec):
             tx_port_args['driver'], tx_port_args['name'],
                                    arg=tx_port_args['arg'])
         tx_port = ret.name
-        ret = cli.bess.create_port(
-            rx_port_args['driver'], rx_port_args['name'],
-                                   arg=rx_port_args['arg'])
-        rx_port = ret.name
+        if rx_port != tx_port:
+            ret = cli.bess.create_port(
+                rx_port_args['driver'], rx_port_args['name'],
+                                       arg=rx_port_args['arg'])
+            rx_port = ret.name
+        else:
+            rx_port = tx_port
 
     if spec is not None and 'src_mac' not in spec:
         spec['src_mac'] = ret.mac_addr
