@@ -22,6 +22,7 @@ class TGENCLI(cli.CLI):
         self.bess = bess
         self.bess_lock = threading.Lock()
         self.cmd_db = cmd_db
+        self.__ports = dict()
         self.__running = dict()
         self.__running_lock = threading.Lock()
         self.this_dir = bess_path = os.getenv('BESS_PATH') + '/bessctl'
@@ -43,7 +44,9 @@ class TGENCLI(cli.CLI):
         Add session to set.  Note that its monitor thread is not started or stopped here.
         """
         with self.__running_lock:
-            self.__running[str(sess.port())] = sess
+            self.__running[str(sess.tx_port())] = sess
+        self.__ports[str(sess.tx_port())] = sess
+        self.__ports[str(sess.rx_port())] = sess
 
     def remove_session(self, port):
         """
@@ -52,12 +55,11 @@ class TGENCLI(cli.CLI):
         """
         with self.__running_lock:
             ret = self.__running.pop(port, None)
+        self.__ports.pop(port, None)
         return ret
 
     def get_session(self, port):
-        with self.__running_lock:
-            ret = self.__running.get(str(port), None)
-        return ret
+        return self.__ports.get(str(port), None)
 
     def get_var_attrs(self, var_token, partial_word):
         return self.cmd_db.get_var_attrs(self, var_token, partial_word)
