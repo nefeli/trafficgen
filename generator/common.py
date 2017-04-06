@@ -1,13 +1,17 @@
 import os
 import sys
 import time
+import subprocess
+import shlex
 
 from module import *
 
+DEVNULL = open(os.devnull, 'wb')
+
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
-ADJUST_WINDOW_US = 1e6
+ADJUST_WINDOW_US = 5e6
 ADJUST_FACTOR = 1.3
-MAX_ROUNDS = 10
+MAX_ROUNDS = 9999
 
 def time_ms():
     return time.time() * 1e3
@@ -77,7 +81,7 @@ class TrafficSpec(object):
                  tx_cores=None, rx_cores=None, src_mac='02:1e:67:9f:4d:bb',
                  dst_mac='02:1e:67:9f:4d:bb', src_ip='192.168.0.1',
                  dst_ip='10.0.0.1', tx_timestamp_offset=0,
-                 rx_timestamp_offset=0):
+                 rx_timestamp_offset=0, etcd=None):
         self.loss_rate = loss_rate
         self.pps = pps
         self.mbps = mbps
@@ -89,6 +93,7 @@ class TrafficSpec(object):
         self.rx_cores = rx_cores
         self.tx_timestamp_offset = tx_timestamp_offset
         self.rx_timestamp_offset = rx_timestamp_offset
+        self.etcd = etcd
 
 
     """Print attribtues of an object in a two-column table of `width` characters
@@ -118,7 +123,8 @@ class TrafficSpec(object):
             ('src_ip', lambda x: x),
             ('dst_ip', lambda x: x),
             ('tx_cores', lambda x: ','.join(map(str, x))),
-            ('rx_cores', lambda x: ','.join(map(str, x)))
+            ('rx_cores', lambda x: ','.join(map(str, x))),
+            ('etcd', lambda x: x)
         ]
         return self._attrs_to_str(attrs, 25)
 
@@ -180,8 +186,8 @@ class Session(object):
 
     # TODO: allow dynamic tx on mbps
     def adjust_tx_rate(self, cli):
-        if self.__spec.loss_rate is None or self.__spec.pps is None \
-           or self.__round == MAX_ROUNDS:
+        if self.__spec.etcd is None and (self.__spec.loss_rate is None or \
+            self.__spec.pps is None or self.__round == MAX_ROUNDS):
             return
 
         delta_t = self.__now - self.__last_check
@@ -195,6 +201,15 @@ class Session(object):
             loss = ((pkts_out - pkts_in) * 100.0) / pkts_out
         except ZeroDivisionError:
             loss = 0.0
+
+        if self.__spec.etcd is not None:
+            cmd = 'etcdctl --endpoint {} set /loss_seen {}'\
+                .format(self.__spec.etcd, loss)
+            subprocess.Popen(shlex.split(cmd),
+                             stdin=DEVNULL,
+                             stdout=DEVNULL,
+                             stderr=DEVNULL).wait()
+            return
 
         if loss > self.__spec.loss_rate:
             self.__current_pps += pkts_in / float(delta_t)

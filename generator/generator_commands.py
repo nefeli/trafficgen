@@ -394,7 +394,7 @@ def _monitor_ports(cli, *ports):
             if len(ports) > 1:
                 print_delta('Total', get_delta(
                         get_total(last.values()),
-                        get_total(now.values())))
+                        get_total(now.values())), time.time())
 
             for port in ports:
                 last[port] = now[port]
