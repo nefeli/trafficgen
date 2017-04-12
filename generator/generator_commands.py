@@ -427,15 +427,11 @@ def _connect_pipeline(cli, pipe):
 
 
 def _create_rate_limit_tree(cli, wid, resource, limit):
-    rr_name = 'rr_w%d' % (wid,)
     rl_name = 'rl_pps_w%d' % (wid,)
-    leaf_name = 'bit_leaf_w%d' % (wid,)
-    cli.bess.add_tc(rr_name, wid=wid, policy='round_robin', priority=0)
-    cli.bess.add_tc(rl_name, wid=wid, parent=rr_name, policy='rate_limit',
+    cli.bess.add_tc(rl_name, wid=wid, policy='rate_limit',
                     resource=resource, limit={resource: limit},
                     max_burst={resource: 16})
-    cli.bess.add_tc(leaf_name, wid=wid, policy='leaf', parent=rl_name)
-    return (rr_name, rl_name, leaf_name)
+    return rl_name
 
 
 def _create_port_args(cli, port_id, num_cores):
@@ -539,17 +535,17 @@ def start(cli, port, mode, spec):
             src = tx_pipe.modules[0]
             if ts.mbps is not None:
                 bps_per_core = long(1e6 * ts.mbps / num_tx_cores)
-                rr_name, rl_name, leaf_name = \
+                rl_name = \
                     _create_rate_limit_tree(cli, core, 'bit', bps_per_core)
-                cli.bess.attach_task(src.name, tc=leaf_name)
+                cli.bess.attach_module(src.name, rl_name)
             elif ts.pps is not None:
                 pps_per_core = long(ts.pps / num_tx_cores)
-                rr_name, rl_name, leaf_name = \
+                rl_name = \
                     _create_rate_limit_tree(cli, core, 'packet', pps_per_core)
-                cli.bess.attach_task(src.name, tc=leaf_name)
+                cli.bess.attach_module(src.name, rl_name)
             else:
                 rr_name, rl_name, leaf_name = None, None, None
-                cli.bess.attach_task(src.name, 0, wid=core)
+                cli.bess.attach_module(src.name, wid=core)
             tx_pipe.tc = rl_name
             _connect_pipeline(cli, tx_pipe.modules)
 
@@ -576,7 +572,7 @@ def start(cli, port, mode, spec):
                 for j, qid in enumerate(rx_qids[core]):
                     q = QueueInc(port=port, qid=qid)
                     queues.append(q)
-                    cli.bess.attach_task(q.name, 0, wid=core)
+                    cli.bess.attach_module(q.name, wid=core)
                     q.connect(m, igate=j)
             else:
                 front = [QueueInc(port=port, qid=i)]

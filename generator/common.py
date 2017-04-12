@@ -210,8 +210,8 @@ class Session(object):
             if tc is None:
                 tx_pipeline.modules[0].update(pps=pps_per_core)
             else:
-                cli.bess.update_tc(tc, resource='packet',
-                                   limit={'packet': long(pps_per_core)})
+                cli.bess.update_tc_params(tc, resource='packet',
+                                          limit={'packet': long(pps_per_core)})
 
     def update_port_stats(self, cli, now=None):
         if self.__last_stats is not None:
