@@ -22,9 +22,6 @@ class TGENCLI(cli.CLI):
         self.cmd_db = cmd_db
         self.__running = dict() 
         self.__running_lock = threading.Lock()
-        self.__monitor_thread = None
-        self.__done = False
-        self.__done_lock = threading.Lock()
         self.this_dir = bess_path = os.getenv('BESS_PATH') + '/bessctl'
 
         super(TGENCLI, self).__init__(self.cmd_db.cmdlist, **kwargs)
@@ -40,10 +37,17 @@ class TGENCLI(cli.CLI):
         return ret
 
     def add_session(self, sess):
+        """
+        Add session to set.  Note that its monitor thread is not started or stopped here.
+        """
         with self.__running_lock:
             self.__running[str(sess.port())] = sess
 
     def remove_session(self, port):
+        """
+        Remove session from set, and return it.  Note that its monitor thread
+        is not yet stopped, if currently running.
+        """
         with self.__running_lock:
             ret = self.__running.pop(port, None)
         return ret
@@ -52,43 +56,6 @@ class TGENCLI(cli.CLI):
         with self.__running_lock:
             ret = self.__running.get(str(port), None)
         return ret
-
-    def clear_sessions(self):
-        with self.__running_lock:
-            self.__running.clear()
-
-    def _done(self):
-        with self.__done_lock:
-            ret = self.__done
-        return ret
-
-    def _finish(self):
-        with self.__done_lock:
-            self.__done = True
-        self.__monitor_thread.join()
-
-    def monitor_thread(self):
-        while not self._done():
-            now = time.time()
-            with self.__running_lock:
-                try:
-                    with self.bess_lock:
-                        for port, sess in self.__running.items():
-                            sess.update_rtt(self)
-                            sess.update_port_stats(self, now)
-
-                        self.bess.pause_all()
-                        try:
-                            for port, sess in self.__running.items():
-                                sess.adjust_tx_rate(self)
-                        finally:
-                            self.bess.resume_all()
-                except bess.BESS.APIError:
-                    pass
-                except:
-                    raise
-            sleep_us(ADJUST_WINDOW_US)
-        print('Port monitor thread exiting...')
 
     def get_var_attrs(self, var_token, partial_word):
         return self.cmd_db.get_var_attrs(self, var_token, partial_word)
@@ -166,13 +133,7 @@ class TGENCLI(cli.CLI):
             self.ferr.write('%s is not available: %s' % (log_path, str(e)))
 
     def loop(self):
-        print('Spawning port monitor thread...')
-        self.__monitor_thread = threading.Thread(target=self.monitor_thread)
-        self.__monitor_thread.start()
-        try:
-            super(TGENCLI, self).loop()
-        finally:
-            self._finish()
+        super(TGENCLI, self).loop()
         print('Killing BESS...')
         bess_commands._do_stop(self)
 
