@@ -65,4 +65,4 @@ class FlowGenMode(object):
     @staticmethod
     def setup_rx_pipeline(cli, port, spec):
         setup_mclasses(cli, globals())
-        return Pipeline([Sink()])
+        return Pipeline([])

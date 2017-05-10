@@ -1,3 +1,4 @@
+from pprint import pformat
 import scapy.all as scapy
 
 from generator.common import TrafficSpec, Pipeline, setup_mclasses
@@ -10,22 +11,25 @@ def _build_pkt(spec, size):
     pkt = eth/ip/udp/payload
     return str(pkt)
 
-class UdpMode(object):
-    name = 'udp'
+class AclMode(object):
+    name = 'acl'
 
     class Spec(TrafficSpec):
-        def __init__(self, pkt_size=60, num_flows=1, imix=False, **kwargs):
+        def __init__(self, pkt_size=60, num_flows=1, imix=False, acls=list(),
+                     **kwargs):
             self.pkt_size = pkt_size
             self.num_flows = num_flows
             self.imix = imix
-            super(UdpMode.Spec, self).__init__(**kwargs)
+            self.acls = acls
+            super(AclMode.Spec, self).__init__(**kwargs)
 
         def __str__(self):
             s = super(UdpMode.Spec, self).__str__() + '\n'
             attrs = [
                 ('pkt_size', lambda x: str(x)),
                 ('num_flows', lambda x: str(x)),
-                ('imix', lambda x: 'enabled' if x else 'disabled')
+                ('imix', lambda x: 'enabled' if x else 'disabled'),
+                ('acls', lambda x: pformat(x))
             ]
             return s + self._attrs_to_str(attrs, 25)
 
@@ -68,4 +72,4 @@ class UdpMode(object):
     @staticmethod
     def setup_rx_pipeline(cli, port, spec):
         setup_mclasses(cli, globals())
-        return Pipeline([])
+        return Pipeline([ACL(rules=self.acls)])

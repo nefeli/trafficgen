@@ -577,8 +577,8 @@ def start(cli, port, mode, spec):
             else:
                 front = [QueueInc(port=port, qid=i)]
 
-            front += [Measure(offset=ts.rx_timestamp_offset)]
-            rx_pipe.modules = front + rx_pipe.modules
+            back += [Measure(offset=ts.rx_timestamp_offset), Sink()]
+            rx_pipe.modules = rx_pipe.modules + back
 
             rx_pipes[core] = rx_pipe
 

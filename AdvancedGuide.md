@@ -141,3 +141,14 @@ Option | Description
 ------ | -----------
 `num_flows` | Setting `num_flows=N` will result in trafficgen sending `N` flows. By default `num_flows` is set to `4000`.
 `src_port` | Setting `src_port=X` will result in trafficgen generating HTTP traffic with TCP source ports starting with `X`. By default `src_port` is set to `1001`.
+
+### ACL Options
+
+The following options are only applicable to ports sending in `udp` mode.
+
+Option | Description
+------ | -----------
+`num_flows` | Setting `num_flows=N` will result in trafficgen sending `N` flows. By default `num_flows` is set to `10`.
+`pkt_size` | Setting `pkt_size=X` will result in trafficgen sending `X`-byte packets. By default `pkt_size` is set to `60`.
+`imix` | Setting `imix=1` will result in trafficgen generate [Internet Mix](https://en.wikipedia.org/wiki/Internet_Mix)-like traffic. By default `imix` is not set and trafficgen generates fixed-size packets of `pkt_size` bytes.
+`acls` | Setting `acls=rules` will result in trafficgen applying ACL rules `rules` to all incoming traffic before preforming any measurements. `rules` should be json encoded and conform to the [BESS ACL module rule format](https://github.com/NetSys/bess/wiki/Built-In-Modules-and-Ports#acl).

@@ -45,6 +45,7 @@ def _choose_arg(arg, kwargs):
 
 def setup_mclasses(cli, globs):
     MCLASSES = [
+        'ACL',
         'FlowGen',
         'IPChecksum',
         'Measure',
