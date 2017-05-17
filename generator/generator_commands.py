@@ -434,9 +434,9 @@ def _create_rate_limit_tree(cli, wid, resource, limit):
     return rl_name
 
 
-def _create_port_args(cli, port_id, num_cores):
+def _create_port_args(cli, port_id, num_rx_cores, num_tx_cores):
     args = {'driver': None, 'name': port_id,
-            'arg': {'num_inc_q': num_cores, 'num_out_q': num_cores}}
+            'arg': {'num_inc_q': num_rx_cores, 'num_out_q': num_tx_cores}}
     args['driver'] = 'PMDPort'
     if re.match(r'^\d\d:\d\d.\d$', port_id) is not None:
         args['arg']['pci'] = port_id
@@ -489,7 +489,7 @@ def start(cli, port, mode, spec):
     num_tx_cores = len(tx_cores)
     num_rx_cores = len(rx_cores)
     num_cores = num_tx_cores + num_rx_cores
-    port_args = _create_port_args(cli, port, max(num_tx_cores, num_rx_cores))
+    port_args = _create_port_args(cli, port, num_tx_cores, num_rx_cores)
     with cli.bess_lock:
         ret = cli.bess.create_port(port_args['driver'], port_args['name'],
                                    arg=port_args['arg'])
@@ -575,7 +575,9 @@ def start(cli, port, mode, spec):
                     cli.bess.attach_module(q.name, wid=core)
                     q.connect(m, igate=j)
             else:
-                front = [QueueInc(port=port, qid=i)]
+                q = QueueInc(port=port, qid=i)
+                front = [q]
+                cli.bess.attach_module(q.name, wid=core)
 
             front += [Measure(offset=ts.rx_timestamp_offset)]
             rx_pipe.modules = front + rx_pipe.modules
