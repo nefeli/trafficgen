@@ -203,7 +203,7 @@ class Session(object):
             if self.__stopmon.is_set():
                 return True
             sleep_ms(1)
-            return False
+        return False
 
     def _pause(self):
         with self.__cli.bess_lock:
