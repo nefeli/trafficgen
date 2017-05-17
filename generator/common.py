@@ -3,28 +3,27 @@ import sys
 import threading
 import time
 
+import bess
 from module import *
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
-ADJUST_WINDOW_US = 1e6
-ADJUST_FACTOR = 1.3
-MAX_ROUNDS = 10
 
-def time_ms():
-    return time.time() * 1e3
+# Default RFC 2544 round duration in seconds
+DEFAULT_2544_WINDOW = 30
 
+# Default RFC 2544 warmup duration in seconds
+DEFAULT_2544_WARMUP = 5
 
-def time_us():
-    return time.time() * 1e6
+# Default RFC 2544 queue drain duration in seconds
+DEFAULT_2544_DRAIN = 5
 
+# Default RFC 2544 rate modifier percentage. Must be in [0, 100]
+DEFAULT_2544_ADJ = 10
 
-def sleep_ms(dur):
-    time.sleep(dur / 1e3)
+# Default RFC 2544 round limit.
+DEFAULT_2544_MAX_ROUNDS = 10
 
-
-def sleep_us(dur):
-    time.sleep(dur / 1e6)
-
+RFC_2544_DEBUG = False
 
 @staticmethod
 def _choose_arg(arg, kwargs):
@@ -50,6 +49,7 @@ def setup_mclasses(cli, globs):
         'IPChecksum',
         'Measure',
         'Merge',
+        'Queue',
         'QueueInc',
         'QueueOut',
         'RandomUpdate',
@@ -71,15 +71,22 @@ class Pipeline(object):
     def __init__(self, modules, tc=None):
         self.modules = modules
         self.tc = tc
+        self.tx_q = None
+        self.tx_rr = None
 
 
 class TrafficSpec(object):
-    def __init__(self, loss_rate=None, pps=None, mbps=None,
+    def __init__(self, pps=None, mbps=None,
                  tx_cores=None, rx_cores=None, src_mac='02:1e:67:9f:4d:bb',
                  dst_mac='02:1e:67:9f:4d:bb', src_ip='192.168.0.1',
                  dst_ip='10.0.0.1', tx_timestamp_offset=0,
-                 rx_timestamp_offset=0):
-        self.loss_rate = loss_rate
+                 rx_timestamp_offset=0,
+                 rfc2544_loss_rate=None,
+                 rfc2544_window=DEFAULT_2544_WINDOW,
+                 rfc2544_warmup=DEFAULT_2544_WARMUP,
+                 rfc2544_drain=DEFAULT_2544_DRAIN,
+                 rfc2544_adj=DEFAULT_2544_ADJ,
+                 rfc2544_max_rounds=DEFAULT_2544_MAX_ROUNDS):
         self.pps = pps
         self.mbps = mbps
         self.src_mac = src_mac
@@ -90,6 +97,12 @@ class TrafficSpec(object):
         self.rx_cores = rx_cores
         self.tx_timestamp_offset = tx_timestamp_offset
         self.rx_timestamp_offset = rx_timestamp_offset
+        self.rfc2544_loss_rate = rfc2544_loss_rate
+        self.rfc2544_window = rfc2544_window
+        self.rfc2544_warmup = rfc2544_warmup
+        self.rfc2544_drain = rfc2544_drain
+        self.rfc2544_adj = rfc2544_adj
+        self.rfc2544_max_rounds = rfc2544_max_rounds
 
 
     """Print attribtues of an object in a two-column table of `width` characters
@@ -111,7 +124,12 @@ class TrafficSpec(object):
 
     def __str__(self):
         attrs = [
-            ('loss_rate', lambda x: str(x) if x else 'disabled'),
+            ('rfc2544_loss_rate', lambda x: str(x) if x else 'disabled'),
+            ('rfc2544_window', lambda x: x),
+            ('rfc2544_warmup', lambda x: x),
+            ('rfc2544_drain', lambda x: x),
+            ('rfc2544_adj', lambda x: x),
+            ('rfc2544_max_rounds', lambda x: x),
             ('pps', lambda x: str(x) if x else '<= line rate'),
             ('mbps', lambda x: str(x) if x else '<= line rate'),
             ('src_mac', lambda x: x),
@@ -154,6 +172,7 @@ class Session(object):
         self.__rx_pipelines = rx_pipelines
         self.__current_pps = spec.pps
         self.__round = 0
+        self.__successful_rounds = 0
         self.__bess = bess
         self.__cli = cli
         self.__stopmon = threading.Event()
@@ -197,47 +216,84 @@ class Session(object):
     def last_check(self):
         return self.__last_chck
 
-    def _sleep_or_quit(self, dur_us):
+    def _sleep_or_quit(self, dur):
         start = time.time()
-        while (time.time() - start) * 1e6 < dur_us:
+        while (time.time() - start) < dur:
             if self.__stopmon.is_set():
                 return True
-            sleep_ms(1)
+            time.sleep(1e-3)
         return False
 
     def _pause(self):
-        with self.__cli.bess_lock:
-            for core in self.__spec.tx_cores + self.__spec.rx_cores:
-                self.__bess.pause_worker(core)
+        """
+        Assuming the caller holds self.__cli.bess_lock
+        """
+        for core in self.__spec.tx_cores + self.__spec.rx_cores:
+            self.__bess.pause_worker(core)
 
     def _resume(self):
-        with self.__cli.bess_lock:
-            for core in self.__spec.tx_cores + self.__spec.rx_cores:
-                self.__bess.resume_worker(core)
+        """
+        Assuming the caller holds self.__cli.bess_lock
+        """
+        for core in self.__spec.tx_cores + self.__spec.rx_cores:
+            self.__bess.resume_worker(core)
 
     def monitor(self):
         """
         Thread to monitor ourselves until told to stop.
         """
-        while not self.__stopmon:
-            now = time.time()
+        while not self.__stopmon.is_set():
             try:
-                self.update_rtt()
-                self.update_port_stats(now)
+                with self.__cli.bess_lock:
+                    self.update_rtt(True)
 
-                self._pause()
-                try:
-                    self.adjust_tx_rate()
-                finally:
+                    self._pause()
+                    for core, tx_pipeline in self.__tx_pipelines.items():
+                        if tx_pipeline.tx_rr is not None:
+                            tx_pipeline.tx_rr.set_gates(gates=[0])
                     self._resume()
-            except bess.BESS.APIError:
+            except bess.BESS.APIError as e:
+                print('BESS API Error (port {}): {}'.format(self.__port, e))
                 pass
-            self._sleep_or_quit(ADJUST_WINDOW_US)
 
-    # TODO: allow dynamic tx on mbps
+            if self._sleep_or_quit(self.__spec.rfc2544_warmup):
+                break
+
+            try:
+                with self.__cli.bess_lock:
+                    self.update_port_stats(time.time())
+            except bess.BESS.APIError as e:
+                print('BESS API Error (port {}): {}'.format(self.__port, e))
+                pass
+
+            if self._sleep_or_quit(self.__spec.rfc2544_window):
+                break
+
+            try:
+                with self.__cli.bess_lock:
+                    self.update_rtt()
+                    self.update_port_stats(time.time())
+
+                    self._pause()
+                    self.adjust_tx_rate()
+                    for core, tx_pipeline in self.__tx_pipelines.items():
+                        if tx_pipeline.tx_rr is not None:
+                            tx_pipeline.tx_rr.set_gates(gates=[1])
+                    self._resume()
+            except bess.BESS.APIError as e:
+                print('BESS API Error (port {}): {}'.format(self.__port, e))
+                pass
+
+            if self._sleep_or_quit(self.__spec.rfc2544_drain):
+                break
+
+
     def adjust_tx_rate(self):
-        if self.__spec.loss_rate is None or self.__spec.pps is None \
-           or self.__round == MAX_ROUNDS:
+        """
+        Assuming the caller holds self.__cli.bess_lock
+        """
+        if self.__spec.rfc2544_loss_rate is None or self.__spec.pps is None \
+           or self.__round == self.__spec.rfc2544_max_rounds:
             return
 
         delta_t = self.__now - self.__last_check
@@ -252,11 +308,29 @@ class Session(object):
         except ZeroDivisionError:
             loss = 0.0
 
-        if loss > self.__spec.loss_rate:
-            self.__current_pps += pkts_in / float(delta_t)
-            self.__current_pps /= 2
+        self.__current_pps = min(self.__current_pps, pkts_out / delta_t)
+        if RFC_2544_DEBUG:
+            print('pkts_in: {}M, pkts_out: {}M, delta_t: {}, ' \
+                  'pps_in: {}M, pps_out: {}M, config_pps: {}M, port: {}, '\
+                  'loss:{}, target: {}'.format(pkts_in/1e6, pkts_out/1e6,
+                                      delta_t,
+                                      pkts_in/delta_t/1e6, pkts_out/delta_t/1e6,
+                                      self.__current_pps/1e6,
+                                      self.__port, loss,
+                                      self.__spec.rfc2544_loss_rate))
+
+        if self.__successful_rounds >= 2:
+            if RFC_2544_DEBUG:
+                print('met target loss rate for two consecutive rounds at '\
+                      '{}Mpps'.format(self.__current_pps/1e6))
+            adj = (100 + self.__spec.rfc2544_adj) / 100.0
+        elif loss > self.__spec.rfc2544_loss_rate:
+            adj = (100 - self.__spec.rfc2544_adj) / 100.0
         else:
-            self.__current_pps *= ADJUST_FACTOR
+            self.__successful_rounds += 1
+            return
+        self.__successful_rounds = 0
+        self.__current_pps *= adj
         self.__round += 1
 
         num_cores = len(self.__tx_pipelines.keys())
@@ -264,11 +338,11 @@ class Session(object):
         for core, tx_pipeline in self.__tx_pipelines.items():
             tc = tx_pipeline.tc 
             if tc is None:
+                print(pps_per_core)
                 tx_pipeline.modules[0].update(pps=pps_per_core)
             else:
-                with self.__cli.bess_lock:
-                    self.__bess.update_tc_params(tc, resource='packet',
-                                                 limit={'packet': long(pps_per_core)})
+                self.__bess.update_tc_params(tc, resource='packet',
+                                             limit={'packet': long(pps_per_core)})
 
     def update_port_stats(self, now=None):
         if self.__last_stats is not None:
@@ -283,7 +357,9 @@ class Session(object):
         stats = {'rtt_avg': 0, 'rtt_med': 0, 'rtt_99': 0,
                  'jitter_avg': 0, 'jitter_med': 0, 'jitter_99': 0}
         for core, rx_pipeline in self.__rx_pipelines.items():
-            now = rx_pipeline.modules[1].get_summary()
+            measure = rx_pipeline.modules[1]
+            now = measure.get_summary()
+            measure.clear()
             stats['rtt_avg'] += now.latency_avg_ns
             stats['rtt_med'] += now.latency_50_ns
             stats['rtt_99'] += now.latency_99_ns
@@ -295,8 +371,10 @@ class Session(object):
             stats[k] /= 1e3 # convert to us
         return stats
 
-    def update_rtt(self):
-        self.__bess.pause_all() # ???
-        self.__curr_rtt = self._get_rtt()
-        self.__bess.resume_all()
+    def update_rtt(self, ignore=False):
+        self._pause()
+        ret = self._get_rtt()
+        if not ignore:
+            self.__curr_rtt = ret
+        self._resume()
         self.__last_check = self.__now

@@ -134,6 +134,9 @@ class TGENCLI(cli.CLI):
 
     def loop(self):
         super(TGENCLI, self).loop()
+        print('Stopping ports...')
+        for port in self.ports():
+            generator_commands._stop(self, port)
         print('Killing BESS...')
         bess_commands._do_stop(self)
 

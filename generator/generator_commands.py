@@ -527,8 +527,15 @@ def start(cli, port, mode, spec):
             tx_pipe = tmode.setup_tx_pipeline(cli, port, ts)
 
             # These modules are required across all pipelines
-            tx_pipe.modules += [Timestamp(offset=ts.tx_timestamp_offset),
-                                 QueueOut(port=port, qid=i)]
+            tx_pipe.tx_rr = RoundRobin(gates=[0])
+            tx_pipe.tx_q = Queue()
+            tx_pipe.modules += [tx_pipe.tx_q,
+                                Timestamp(offset=ts.tx_timestamp_offset),
+                                tx_pipe.tx_rr]
+            q = QueueOut(port=port, qid=i)
+            sink = Sink()
+            tx_pipe.tx_rr.connect(q, 0, 0)
+            tx_pipe.tx_rr.connect(sink, 1, 0)
             tx_pipes[core] = tx_pipe
 
             # Setup rate limiting, pin pipelines to cores, connect pipelines
@@ -537,17 +544,21 @@ def start(cli, port, mode, spec):
                 bps_per_core = long(1e6 * ts.mbps / num_tx_cores)
                 rl_name = \
                     _create_rate_limit_tree(cli, core, 'bit', bps_per_core)
-                cli.bess.attach_module(src.name, rl_name)
+                cli.bess.attach_module(src.name, wid=core)
+                cli.bess.attach_module(tx_pipe.tx_q.name, rl_name)
             elif ts.pps is not None:
                 pps_per_core = long(ts.pps / num_tx_cores)
                 rl_name = \
                     _create_rate_limit_tree(cli, core, 'packet', pps_per_core)
-                cli.bess.attach_module(src.name, rl_name)
-            else:
-                rr_name, rl_name, leaf_name = None, None, None
                 cli.bess.attach_module(src.name, wid=core)
+                cli.bess.attach_module(tx_pipe.tx_q.name, rl_name)
+            else:
+                rr_name = None
+                cli.bess.attach_module(src, wid=core)
+                cli.bess.attach_module(tx_pipe.tx_q.name, wid=core)
             tx_pipe.tc = rl_name
             _connect_pipeline(cli, tx_pipe.modules)
+            tx_pipe.modules += [q, sink]
 
         # Setup RX pipelines
         rx_qids = dict()
