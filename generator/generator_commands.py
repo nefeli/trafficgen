@@ -579,7 +579,7 @@ def start(cli, port, mode, spec):
                 front = [q]
                 cli.bess.attach_module(q.name, wid=core)
 
-            front += [Measure(offset=ts.rx_timestamp_offset)]
+            front += [Measure(offset=ts.rx_timestamp_offset, jitter_sample_prob=1.0)]
             rx_pipe.modules = front + rx_pipe.modules
 
             rx_pipes[core] = rx_pipe
