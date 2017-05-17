@@ -1,5 +1,6 @@
 import os
 import sys
+import threading
 import time
 
 from module import *
@@ -127,7 +128,10 @@ class TrafficSpec(object):
 
 
 class Session(object):
-    def __init__(self, port, spec, mode, tx_pipelines, rx_pipelines):
+    """
+    docstring
+    """
+    def __init__(self, port, spec, mode, tx_pipelines, rx_pipelines, bess, cli):
         now = time.time()
         self.__port = port
         self.__spec = spec
@@ -150,6 +154,21 @@ class Session(object):
         self.__rx_pipelines = rx_pipelines
         self.__current_pps = spec.pps
         self.__round = 0
+        self.__bess = bess
+        self.__cli = cli
+        self.__stopmon = threading.Event()
+        self.__monitor_thread = None
+
+    def start_monitor(self):
+        if self.__monitor_thread is None:
+            self.__stopmon.clear()
+            self.__monitor_thread = threading.Thread(target=self.monitor)
+            self.__monitor_thread.start()
+
+    def stop_monitor(self):
+        if self.__monitor_thread is not None:
+            self.__stopmon.set()
+            self.__monitor_thread.join()
 
     def port(self):
         return self.__port
@@ -178,8 +197,45 @@ class Session(object):
     def last_check(self):
         return self.__last_chck
 
+    def _sleep_or_quit(self, dur_us):
+        start = time.time()
+        while (time.time() - start) * 1e6 < dur_us:
+            if self.__stopmon.is_set():
+                return True
+            sleep_ms(1)
+            return False
+
+    def _pause(self):
+        with self.__cli.bess_lock:
+            for core in self.__spec.tx_cores + self.__spec.rx_cores:
+                self.__bess.pause_worker(core)
+
+    def _resume(self):
+        with self.__cli.bess_lock:
+            for core in self.__spec.tx_cores + self.__spec.rx_cores:
+                self.__bess.resume_worker(core)
+
+    def monitor(self):
+        """
+        Thread to monitor ourselves until told to stop.
+        """
+        while not self.__stopmon:
+            now = time.time()
+            try:
+                self.update_rtt()
+                self.update_port_stats(now)
+
+                self._pause()
+                try:
+                    self.adjust_tx_rate()
+                finally:
+                    self._resume()
+            except bess.BESS.APIError:
+                pass
+            self._sleep_or_quit(ADJUST_WINDOW_US)
+
     # TODO: allow dynamic tx on mbps
-    def adjust_tx_rate(self, cli):
+    def adjust_tx_rate(self):
         if self.__spec.loss_rate is None or self.__spec.pps is None \
            or self.__round == MAX_ROUNDS:
             return
@@ -210,13 +266,14 @@ class Session(object):
             if tc is None:
                 tx_pipeline.modules[0].update(pps=pps_per_core)
             else:
-                cli.bess.update_tc_params(tc, resource='packet',
-                                          limit={'packet': long(pps_per_core)})
+                with self.__cli.bess_lock:
+                    self.__bess.update_tc_params(tc, resource='packet',
+                                                 limit={'packet': long(pps_per_core)})
 
-    def update_port_stats(self, cli, now=None):
+    def update_port_stats(self, now=None):
         if self.__last_stats is not None:
             self.__last_stats = self.__curr_stats
-        self.__curr_stats = cli.bess.get_port_stats(self.__port)
+        self.__curr_stats = self.__bess.get_port_stats(self.__port)
         if self.__last_stats is None:
             self.__last_stats = self.__curr_stats
         self.__last_check = self.__now
@@ -238,8 +295,8 @@ class Session(object):
             stats[k] /= 1e3 # convert to us
         return stats
 
-    def update_rtt(self, cli):
-        cli.bess.pause_all()
+    def update_rtt(self):
+        self.__bess.pause_all() # ???
         self.__curr_rtt = self._get_rtt()
-        cli.bess.resume_all()
+        self.__bess.resume_all()
         self.__last_check = self.__now

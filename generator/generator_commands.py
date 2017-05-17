@@ -590,12 +590,15 @@ def start(cli, port, mode, spec):
 
         cli.bess.resume_all()
 
-    cli.add_session(Session(port, ts, mode, tx_pipes, rx_pipes))
+    sess = Session(port, ts, mode, tx_pipes, rx_pipes, cli.bess, cli)
+    sess.start_monitor()
+    cli.add_session(sess)
 
 
 def _stop(cli, port):
     global available_cores
     sess = cli.remove_session(port)
+    sess.stop_monitor()
     reclaimed_cores = sess.spec().tx_cores + sess.spec().rx_cores
     available_cores = list(sorted(available_cores + reclaimed_cores))
     with cli.bess_lock:
