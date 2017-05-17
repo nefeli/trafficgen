@@ -23,8 +23,7 @@ class TGENCLI(cli.CLI):
         self.__running = dict() 
         self.__running_lock = threading.Lock()
         self.__monitor_thread = None
-        self.__done = False
-        self.__done_lock = threading.Lock()
+        self.__done = threading.Event()
         self.this_dir = bess_path = os.getenv('BESS_PATH') + '/bessctl'
 
         super(TGENCLI, self).__init__(self.cmd_db.cmdlist, **kwargs)
@@ -57,18 +56,20 @@ class TGENCLI(cli.CLI):
         with self.__running_lock:
             self.__running.clear()
 
-    def _done(self):
-        with self.__done_lock:
-            ret = self.__done
-        return ret
-
     def _finish(self):
-        with self.__done_lock:
-            self.__done = True
+        self.__done.set()
         self.__monitor_thread.join()
 
+    def _sleep_or_quit(self, dur_us):
+        start = time.time()
+        while (time.time() - start) * 1e6 < dur_us:
+            if self.__done.is_set():
+                return True
+            sleep_ms(1)
+            return False
+
     def monitor_thread(self):
-        while not self._done():
+        while not self.__done.is_set():
             now = time.time()
             with self.__running_lock:
                 try:
@@ -87,7 +88,7 @@ class TGENCLI(cli.CLI):
                     pass
                 except:
                     raise
-            sleep_us(ADJUST_WINDOW_US)
+            self._sleep_or_quit(ADJUST_WINDOW_US)
         print('Port monitor thread exiting...')
 
     def get_var_attrs(self, var_token, partial_word):
