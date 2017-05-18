@@ -30,6 +30,7 @@ available_cores = list(range(multiprocessing.cpu_count()))
 DEFAULT_STATS_CSV = '/tmp/bench.csv'
 stats_csv = DEFAULT_STATS_CSV
 
+
 def get_var_attrs(cli, var_token, partial_word):
     var_type = None
     var_desc = ''
@@ -86,6 +87,8 @@ def get_var_attrs(cli, var_token, partial_word):
 #   head: consumed string portion
 #   tail: the rest of input line
 # You can assume that 'line == head + tail'
+
+
 def split_var(cli, var_type, line):
     if var_type in ['name', 'filename', 'endis', 'int', 'portid']:
         pos = line.find(' ')
@@ -186,6 +189,7 @@ bessctl_cmds = [
 
 cmdlist = filter(lambda x: x[0] in bessctl_cmds, bess_commands.cmdlist)
 
+
 def cmd(syntax, desc=''):
     def cmd_decorator(func):
         cmdlist.append((syntax, desc, func))
@@ -201,20 +205,23 @@ def help(cli):
 def _show_config(cli, port):
     sess = cli.get_session(port)
     cli.fout.write('Port %s\n' % (port,))
-    divider = '-'*(4 + len(port)) + '\n'
+    divider = '-' * (4 + len(port)) + '\n'
     cli.fout.write(divider)
     cli.fout.write('mode: %23s\n' % (sess.mode(),))
     cli.fout.write(str(sess.spec()) + '\n')
     cli.fout.write(divider)
+
 
 def _show_configs(cli, ports):
     sorted(list(set(ports)))
     for port in ports:
         _show_config(cli, port)
 
+
 @cmd('show config', 'Show the current confiugration of all ports')
 def show_config_all(cli):
     _show_configs(cli, cli.ports())
+
 
 @cmd('show config PORT...', 'Show the current confiugration of a port')
 def show_config_all(cli, ports):
@@ -230,6 +237,7 @@ def _do_reset(cli):
         cli.bess.reset_all()
         cli.bess.resume_all()
 
+
 @cmd('reset', 'Reset trafficgen')
 def reset(cli):
     bess_commands.warn(cli, 'Going to reset everything.', _do_reset)
@@ -240,24 +248,25 @@ PortRate = collections.namedtuple('PortRate',
                                    'jitter_avg', 'jitter_med', 'jitter_99',
                                    'out_packets', 'out_dropped', 'out_bytes'])
 
+
 def _monitor_ports(cli, *ports):
     global stats_csv
 
     def get_delta(old, new):
         sec_diff = new['timestamp'] - old['timestamp']
         return PortRate(
-            inc_packets = (new['inc_packets'] - old['inc_packets']) / sec_diff,
-            inc_dropped = (new['inc_dropped'] - old['inc_dropped']) / sec_diff,
-            inc_bytes = (new['inc_bytes'] - old['inc_bytes']) / sec_diff,
-            rtt_avg = (new['rtt_avg'] + old['rtt_avg']) / 2,
-            rtt_med = (new['rtt_med'] + old['rtt_med']) / 2,
-            rtt_99 = (new['rtt_99'] + old['rtt_99']) / 2,
-            jitter_avg = (new['jitter_avg'] + old['jitter_avg']) / 2,
-            jitter_med = (new['jitter_med'] + old['jitter_med']) / 2,
-            jitter_99 = (new['jitter_99'] + old['jitter_99']) / 2,
-            out_packets = (new['out_packets'] - old['out_packets']) / sec_diff,
-            out_dropped = (new['out_dropped'] - old['out_dropped']) / sec_diff,
-            out_bytes = (new['out_bytes'] - old['out_bytes']) / sec_diff)
+            inc_packets=(new['inc_packets'] - old['inc_packets']) / sec_diff,
+            inc_dropped=(new['inc_dropped'] - old['inc_dropped']) / sec_diff,
+            inc_bytes=(new['inc_bytes'] - old['inc_bytes']) / sec_diff,
+            rtt_avg=(new['rtt_avg'] + old['rtt_avg']) / 2,
+            rtt_med=(new['rtt_med'] + old['rtt_med']) / 2,
+            rtt_99=(new['rtt_99'] + old['rtt_99']) / 2,
+            jitter_avg=(new['jitter_avg'] + old['jitter_avg']) / 2,
+            jitter_med=(new['jitter_med'] + old['jitter_med']) / 2,
+            jitter_99=(new['jitter_99'] + old['jitter_99']) / 2,
+            out_packets=(new['out_packets'] - old['out_packets']) / sec_diff,
+            out_dropped=(new['out_dropped'] - old['out_dropped']) / sec_diff,
+            out_bytes=(new['out_bytes'] - old['out_bytes']) / sec_diff)
 
     def print_header(timestamp):
         cli.fout.write('\n')
@@ -273,22 +282,21 @@ def _monitor_ports(cli, *ports):
     def print_footer():
         cli.fout.write('%s\n' % ('-' * 186))
 
-
     def print_delta(port, delta, timestamp):
         stats = (port,
-                (delta.inc_bytes + delta.inc_packets * 24) * 8 / 1e6,
-                delta.inc_packets / 1e6,
-                delta.inc_dropped,
-                delta.rtt_avg,
-                delta.rtt_med,
-                delta.rtt_99,
-                delta.jitter_avg,
-                delta.jitter_med,
-                delta.jitter_99,
-                (delta.out_bytes + delta.out_packets * 24) * 8 / 1e6,
-                delta.out_packets / 1e6,
-                delta.out_dropped)
-        cli.fout.write('%-20s%14.1f%10.3f%10d%15.3f%15.3f%15.3f%15.3f%15.3f%15.3f        '\
+                 (delta.inc_bytes + delta.inc_packets * 24) * 8 / 1e6,
+                 delta.inc_packets / 1e6,
+                 delta.inc_dropped,
+                 delta.rtt_avg,
+                 delta.rtt_med,
+                 delta.rtt_99,
+                 delta.jitter_avg,
+                 delta.jitter_med,
+                 delta.jitter_99,
+                 (delta.out_bytes + delta.out_packets * 24) * 8 / 1e6,
+                 delta.out_packets / 1e6,
+                 delta.out_dropped)
+        cli.fout.write('%-20s%14.1f%10.3f%10d%15.3f%15.3f%15.3f%15.3f%15.3f%15.3f        '
                        '%14.1f%10.3f%10d\n' % stats)
 
         with open(stats_csv, 'a+') as f:
@@ -352,17 +360,17 @@ def _monitor_ports(cli, *ports):
         if not ports:
             raise cli.CommandError('No port to monitor')
 
-    cli.fout.write('Monitoring ports: %s (Send CTRL + c to stop)\n' % \
+    cli.fout.write('Monitoring ports: %s (Send CTRL + c to stop)\n' %
                    ', '.join(ports))
 
     last = {}
     now = {}
 
     csv_header = '#' + ','.join(['time', 'port',
-    'inc_mbps', 'inc_mpps', 'inc_dropped',
-    'avg_rtt_us', 'med_rtt_us', '99th_rtt_us',
-    'avg_jit_us', 'med_jit_us', '99th_jit_us',
-    'out_mbps', 'out_mpps', 'out_dropped']) + '\n'
+                                 'inc_mbps', 'inc_mpps', 'inc_dropped',
+                                 'avg_rtt_us', 'med_rtt_us', '99th_rtt_us',
+                                 'avg_jit_us', 'med_jit_us', '99th_jit_us',
+                                 'out_mbps', 'out_mpps', 'out_dropped']) + '\n'
 
     with open(stats_csv, 'w+') as f:
         for port in ports:
@@ -393,7 +401,7 @@ def _monitor_ports(cli, *ports):
 
             if len(ports) > 1:
                 print_delta('Total', get_delta(
-                        get_total(last.values()),
+                    get_total(last.values()),
                         get_total(now.values())))
 
             for port in ports:
@@ -422,7 +430,7 @@ def _connect_pipeline(cli, pipe):
     for i in range(len(pipe)):
         u = pipe[i]
         if i < len(pipe) - 1:
-            v =  pipe[i + 1]
+            v = pipe[i + 1]
             u.connect(v)
 
 
@@ -485,7 +493,7 @@ def start(cli, port, mode, spec):
         else:
             raise cli.InternalError('No available cores.')
 
-    # Create the port 
+    # Create the port
     num_tx_cores = len(tx_cores)
     num_rx_cores = len(rx_cores)
     num_cores = num_tx_cores + num_rx_cores
@@ -498,10 +506,10 @@ def start(cli, port, mode, spec):
     if spec is not None and 'src_mac' not in spec:
         spec['src_mac'] = ret.mac_addr
 
-    # Find traffic mode 
+    # Find traffic mode
     tmode = None
     for x in modes.__dict__:
-        m = modes.__dict__[x] 
+        m = modes.__dict__[x]
         if getattr(m, 'name', '') == mode:
             tmode = m
 
@@ -590,7 +598,8 @@ def start(cli, port, mode, spec):
                 front = [q]
                 cli.bess.attach_module(q.name, wid=core)
 
-            front += [Measure(offset=ts.rx_timestamp_offset, jitter_sample_prob=1.0)]
+            front += [
+                Measure(offset=ts.rx_timestamp_offset, jitter_sample_prob=1.0)]
             rx_pipe.modules = front + rx_pipe.modules
 
             rx_pipes[core] = rx_pipe
@@ -634,6 +643,7 @@ def _stop(cli, port):
             cli.bess.destroy_port(sess.port())
         finally:
             cli.bess.resume_all()
+
 
 @cmd('stop PORT...', 'Stop sending packets on a set of ports')
 def stop(cli, ports):

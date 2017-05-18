@@ -15,12 +15,14 @@ import commands as bess_commands
 import generator_commands
 from common import *
 
+
 class TGENCLI(cli.CLI):
+
     def __init__(self, bess, cmd_db, **kwargs):
         self.bess = bess
         self.bess_lock = threading.Lock()
         self.cmd_db = cmd_db
-        self.__running = dict() 
+        self.__running = dict()
         self.__running_lock = threading.Lock()
         self.this_dir = bess_path = os.getenv('BESS_PATH') + '/bessctl'
 
@@ -94,7 +96,7 @@ class TGENCLI(cli.CLI):
 
         except self.bess.RPCError as e:
             self.err('RPC failed to {}:{} - {}'.format(
-                    self.bess.peer[0], self.bess.peer[1], e.message))
+                self.bess.peer[0], self.bess.peer[1], e.message))
 
             self._handle_broken_connection()
             raise self.HandledError()
@@ -151,6 +153,7 @@ class TGENCLI(cli.CLI):
 
 
 class ColorizedOutput(object):
+
     def __init__(self, orig_out, color):
         self.orig_out = orig_out
         self.color = color

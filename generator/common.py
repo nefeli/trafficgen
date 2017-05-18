@@ -29,6 +29,7 @@ DEFAULT_2544_MAX_ROUNDS = 10
 
 RFC_2544_DEBUG = False
 
+
 @staticmethod
 def _choose_arg(arg, kwargs):
     if kwargs:
@@ -68,10 +69,11 @@ def setup_mclasses(cli, globs):
         if name in globals():
             break
         globs[name] = type(str(name), (Module,), {'bess': cli.bess,
-                               'choose_arg': _choose_arg})
+                                                  'choose_arg': _choose_arg})
 
 
 class Pipeline(object):
+
     def __init__(self, modules, tc=None):
         self.modules = modules
         self.tc = tc
@@ -80,6 +82,7 @@ class Pipeline(object):
 
 
 class TrafficSpec(object):
+
     def __init__(self, pps=None, mbps=None,
                  tx_cores=None, rx_cores=None, src_mac='02:1e:67:9f:4d:bb',
                  dst_mac='02:1e:67:9f:4d:bb', src_ip='192.168.0.1',
@@ -108,7 +111,6 @@ class TrafficSpec(object):
         self.rfc2544_adj = rfc2544_adj
         self.rfc2544_max_rounds = rfc2544_max_rounds
 
-
     """Print attribtues of an object in a two-column table of `width` characters
 
     Arguements:
@@ -117,6 +119,7 @@ class TrafficSpec(object):
                  converting that attribue to a string
         width -- row width in characters
     """
+
     def _attrs_to_str(self, attrs, width):
         lines = list()
         for a, f in attrs:
@@ -150,9 +153,11 @@ class TrafficSpec(object):
 
 
 class Session(object):
+
     """
     docstring
     """
+
     def __init__(self, port, spec, mode, tx_pipelines, rx_pipelines, bess, cli):
         now = time.time()
         self.__port = port
@@ -162,7 +167,7 @@ class Session(object):
         self.__last_stats = None
         """
         `__curr_rtt` stores the average of the rtt measurements
-        from each worker associated to this session. 
+        from each worker associated to this session.
         """
         self.__curr_rtt = None
         self.__now = now
@@ -297,7 +302,6 @@ class Session(object):
             if self._sleep_or_quit(self.__spec.rfc2544_drain):
                 break
 
-
     def adjust_tx_rate(self):
         """
         Assuming the caller holds self.__cli.bess_lock
@@ -307,12 +311,14 @@ class Session(object):
             return
 
         delta_t = self.__now - self.__last_check
-        # Count rx drops, too. We shouldn't penalize the DUT if we can't keep up
-        pkts_in = (self.__curr_stats.inc.packets + \
+        # Count rx drops, too. We shouldn't penalize the DUT if we can't keep
+        # up
+        pkts_in = (self.__curr_stats.inc.packets +
                    self.__curr_stats.inc.dropped) - \
-                  (self.__last_stats.inc.packets + \
+                  (self.__last_stats.inc.packets +
                    self.__last_stats.inc.dropped)
-        pkts_out = self.__curr_stats.out.packets - self.__last_stats.out.packets
+        pkts_out = self.__curr_stats.out.packets - \
+            self.__last_stats.out.packets
         try:
             loss = ((pkts_out - pkts_in) * 100.0) / pkts_out
         except ZeroDivisionError:
@@ -320,19 +326,20 @@ class Session(object):
 
         self.__current_pps = min(self.__current_pps, pkts_out / delta_t)
         if RFC_2544_DEBUG:
-            print('pkts_in: {}M, pkts_out: {}M, delta_t: {}, ' \
-                  'pps_in: {}M, pps_out: {}M, config_pps: {}M, port: {}, '\
-                  'loss:{}, target: {}'.format(pkts_in/1e6, pkts_out/1e6,
-                                      delta_t,
-                                      pkts_in/delta_t/1e6, pkts_out/delta_t/1e6,
-                                      self.__current_pps/1e6,
-                                      self.__port, loss,
-                                      self.__spec.rfc2544_loss_rate))
+            print('pkts_in: {}M, pkts_out: {}M, delta_t: {}, '
+                  'pps_in: {}M, pps_out: {}M, config_pps: {}M, port: {}, '
+                  'loss:{}, target: {}'.format(pkts_in / 1e6, pkts_out / 1e6,
+                                               delta_t,
+                                               pkts_in / delta_t /
+                                               1e6, pkts_out / delta_t / 1e6,
+                                               self.__current_pps / 1e6,
+                                               self.__port, loss,
+                                               self.__spec.rfc2544_loss_rate))
 
         if self.__successful_rounds >= 2:
             if RFC_2544_DEBUG:
-                print('met target loss rate for two consecutive rounds at '\
-                      '{}Mpps'.format(self.__current_pps/1e6))
+                print('met target loss rate for two consecutive rounds at '
+                      '{}Mpps'.format(self.__current_pps / 1e6))
             adj = (100 + self.__spec.rfc2544_adj) / 100.0
         elif loss > self.__spec.rfc2544_loss_rate:
             adj = (100 - self.__spec.rfc2544_adj) / 100.0
@@ -346,7 +353,7 @@ class Session(object):
         num_cores = len(self.__tx_pipelines.keys())
         pps_per_core = self.__current_pps / num_cores
         for core, tx_pipeline in self.__tx_pipelines.items():
-            tc = tx_pipeline.tc 
+            tc = tx_pipeline.tc
             if tc is None:
                 print(pps_per_core)
                 tx_pipeline.modules[0].update(pps=pps_per_core)
@@ -378,7 +385,7 @@ class Session(object):
             stats['jitter_99'] += now.jitter_99_ns
         for k in stats:
             stats[k] /= len(self.__rx_pipelines.keys())
-            stats[k] /= 1e3 # convert to us
+            stats[k] /= 1e3  # convert to us
         return stats
 
     def update_rtt(self, ignore=False):
