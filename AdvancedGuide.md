@@ -1,6 +1,6 @@
 # Advanced Guide
 
-The command to start traffic takes the follwing form
+The command to start traffic takes the following form
 
 ```
 start PORT MODE [OPTIONS...]
@@ -15,7 +15,7 @@ You can generate three types of traffic
 
 ## Quick Start
 
-Here are a few useful commands to quickly get started. See [Options](#options)
+Here are a few useful commands to get started quickly. See [Options](#options)
 below for more a more detailed configurations.
 
 A simple benchmarking scenario might involve measuring how well a DUT copes with
@@ -74,7 +74,7 @@ imix:                disabled
 -----------
 ```
 
-To step generating traffic just enter `stop 03:00.0` at the prompt.
+To stop generating traffic just enter `stop 03:00.0` at the prompt.
 
 If you're benchmarking a DUT over a fast NIC, you may need to use multiple cores
 to saturate the link. You can do that by appending the `cores` option to your
