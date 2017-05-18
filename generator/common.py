@@ -8,6 +8,10 @@ from module import *
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 
+# How often, in seconds, monitor threads for non RFC2544 sessions should wake
+# up to update statistics
+MONITOR_PERIOD = 1
+
 # Default RFC 2544 round duration in seconds
 DEFAULT_2544_WINDOW = 30
 
@@ -246,7 +250,7 @@ class Session(object):
             if self.__spec.rfc2544_loss_rate is None:
                 self.update_rtt()
                 self.update_port_stats(time.time())
-                time.sleep(1)
+                time.sleep(MONITOR_PERIOD)
                 continue
 
             try:
