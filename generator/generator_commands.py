@@ -322,16 +322,17 @@ def _monitor_ports(cli, *ports):
         return total
 
     def get_all_stats(cli, sess, port):
-        stats = cli.bess.get_port_stats(port)
+        in_stats = cli.bess.get_port_stats(sess.rx_port())
+        out_stats = cli.bess.get_port_stats(sess.tx_port())
         try:
             ret = {
-                'inc_packets': stats.inc.packets,
-                'out_packets': stats.out.packets,
-                'inc_bytes': stats.inc.bytes,
-                'out_bytes': stats.out.bytes,
-                'inc_dropped': stats.inc.dropped,
-                'out_dropped': stats.out.dropped,
-                'timestamp': stats.timestamp,
+                'inc_packets': in_stats.inc.packets,
+                'out_packets': out_stats.out.packets,
+                'inc_bytes': in_stats.inc.bytes,
+                'out_bytes': out_stats.out.bytes,
+                'inc_dropped': in_stats.inc.dropped,
+                'out_dropped': out_stats.out.dropped,
+                'timestamp': in_stats.timestamp,
             }
         except:
             ret = {
@@ -350,15 +351,11 @@ def _monitor_ports(cli, *ports):
         ret.update(rtt_now)
         return ret
 
-    all_ports = sorted(cli.bess.list_ports().ports, key=lambda x: x.name)
-    drivers = {}
-    for port in all_ports:
-        drivers[port.name] = port.driver
+    if not ports:
+        ports = sorted(cli.ports())
 
     if not ports:
-        ports = [port.name for port in all_ports]
-        if not ports:
-            raise cli.CommandError('No port to monitor')
+        raise cli.CommandError('No port to monitor')
 
     cli.fout.write('Monitoring ports: %s (Send CTRL + c to stop)\n' %
                    ', '.join(ports))
@@ -395,8 +392,14 @@ def _monitor_ports(cli, *ports):
             print_header(now[port]['timestamp'])
 
             for port in ports:
-                print_delta('%s/%s' % (port, drivers[port]),
-                            get_delta(last[port], now[port]), now[port]['timestamp'])
+                sess = cli.get_session(port)
+                if sess.tx_port() == sess.rx_port():
+                    label = 'Session: %s' % (sess.tx_port(),)
+                else:
+                    label = 'Session: %s -> %s' % (sess.tx_port(), sess.rx_port())
+                print_delta(label,
+                            get_delta(last[port], now[port]),
+                            now[port]['timestamp'])
 
             print_footer()
 
@@ -666,7 +669,8 @@ def _stop(cli, port):
                 cli.bess.destroy_worker(worker)
 
             cli.bess.destroy_port(sess.tx_port())
-            cli.bess.destroy_port(sess.rx_port())
+            if sess.rx_port() != sess.tx_port():
+                cli.bess.destroy_port(sess.rx_port())
         finally:
             cli.bess.resume_all()
 
