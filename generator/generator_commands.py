@@ -553,8 +553,8 @@ def start(cli, port, mode, spec):
                 cli.bess.attach_module(src.name, wid=core)
                 cli.bess.attach_module(tx_pipe.tx_q.name, rl_name)
             else:
-                rr_name = None
-                cli.bess.attach_module(src, wid=core)
+                rl_name = None
+                cli.bess.attach_module(src.name, wid=core)
                 cli.bess.attach_module(tx_pipe.tx_q.name, wid=core)
             tx_pipe.tc = rl_name
             _connect_pipeline(cli, tx_pipe.modules)

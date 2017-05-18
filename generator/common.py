@@ -243,6 +243,12 @@ class Session(object):
         Thread to monitor ourselves until told to stop.
         """
         while not self.__stopmon.is_set():
+            if self.__spec.rfc2544_loss_rate is None:
+                self.update_rtt()
+                self.update_port_stats(time.time())
+                time.sleep(1)
+                continue
+
             try:
                 with self.__cli.bess_lock:
                     self.update_rtt(True)
