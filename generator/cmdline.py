@@ -102,27 +102,8 @@ class TGENCLI(cli.CLI):
             raise self.HandledError()
 
         except self.bess.Error as e:
-            self.err(e.errmsg)
-
-            if e.err in errno.errorcode:
-                err_code = errno.errorcode[e.err]
-            else:
-                err_code = '<unknown>'
-
-            self.ferr.write('  BESS daemon response - errno=%d (%s: %s)\n' %
-                            (e.err, err_code, os.strerror(e.err)))
-
-            if e.details:
-                details = pprint.pformat(e.details)
-                initial_indent = '  error details: '
-                subsequent_indent = ' ' * len(initial_indent)
-
-                for i, line in enumerate(details.splitlines()):
-                    if i == 0:
-                        self.fout.write('%s%s\n' % (initial_indent, line))
-                    else:
-                        self.fout.write('%s%s\n' % (subsequent_indent, line))
-
+            self.err(e)
+            self.ferr.write('  BESS daemon response - %s\n' % (e,))
             raise self.HandledError()
 
     def _print_crashlog(self):
