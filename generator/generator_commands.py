@@ -437,14 +437,14 @@ def _connect_pipeline(cli, pipe):
 def _create_rate_limit_tree(cli, wid, resource, limit):
     rl_name = 'rl_pps_w%d' % (wid,)
     cli.bess.add_tc(rl_name, wid=wid, policy='rate_limit',
-                    resource=resource, limit={resource: limit},
-                    max_burst={resource: 16})
+                    resource=resource, limit={resource: limit})
     return rl_name
 
 
 def _create_port_args(cli, port_id, num_rx_cores, num_tx_cores):
     args = {'driver': None, 'name': port_id,
-            'arg': {'num_inc_q': num_rx_cores, 'num_out_q': num_tx_cores}}
+            'arg': {'num_inc_q': num_rx_cores, 'num_out_q': num_tx_cores,
+                    'size_inc_q': 2048, 'size_out_q': 2048}}
     args['driver'] = 'PMDPort'
     if re.match(r'^\d\d:\d\d.\d$', port_id) is not None:
         args['arg']['pci'] = port_id
