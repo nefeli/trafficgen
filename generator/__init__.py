@@ -8,9 +8,9 @@ try:
         print >> sys.stderr, 'BESS_PATH not set'
         sys.exit(1)
     sys.path.insert(1, '%s/bessctl' % bess_path)
-    sys.path.insert(1, '%s/libbess-python' % bess_path)
+    sys.path.insert(1, '%s/pybess' % bess_path)
     import bess
     import cli
 except ImportError:
-    print >> sys.stderr, 'Cannot import the API module (libbess-python)'
+    print >> sys.stderr, 'Cannot import the API module (pybess)'
     raise
