@@ -64,6 +64,7 @@ def setup_mclasses(cli, globs):
         'Sink',
         'Timestamp',
         'Update',
+        'VLANPush',
     ]
     for name in MCLASSES:
         if name in globals():
