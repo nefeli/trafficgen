@@ -7,9 +7,9 @@ import tempfile
 import threading
 import time
 
-import bess
+import pybess.bess as bess
 import cli
-from module import *
+from pybess.module import *
 
 import commands as bess_commands
 import generator_commands
