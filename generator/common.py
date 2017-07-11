@@ -3,8 +3,8 @@ import sys
 import threading
 import time
 
-import bess
-from module import *
+import pybess.bess
+from pybess.module import *
 
 THIS_DIR = os.path.dirname(os.path.realpath(__file__))
 

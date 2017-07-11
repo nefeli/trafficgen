@@ -20,7 +20,7 @@ import time
 import traceback
 
 import commands as bess_commands
-from module import *
+from pybess.module import *
 
 from common import *
 import modes
