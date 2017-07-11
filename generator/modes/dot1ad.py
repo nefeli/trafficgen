@@ -14,12 +14,17 @@ class Dot1ADMode(object):
     name = 'dot1ad'
 
     class Spec(TrafficSpec):
-        def __init__(self, pkt_size=60, num_flows=1, imix=False, **kwargs):
+        def __init__(self, pkt_size=60, tci1_min=0, tci1_max=0xFFFF,
+                tci2_min=0, tci2_max=0xFFFF, imix=False, **kwargs):
+            super(Dot1ADMode.Spec, self).__init__(**kwargs)
             self.pkt_size = pkt_size
             self.imix = imix
-            super(Dot1ADMode.Spec, self).__init__(**kwargs)
-            self.rx_timestamp_offset = 48
-            self.tx_timestamp_offset = 48
+            self.rx_timestamp_offset = 50
+            self.tx_timestamp_offset = 50
+            self.tci1_min = tci1_min
+            self.tci1_max = tci1_max
+            self.tci2_min = tci2_min
+            self.tci2_max = tci2_max
 
 
         def __str__(self):
@@ -62,12 +67,12 @@ class Dot1ADMode(object):
             VLANPush(),
             RandomUpdate(fields=[{'offset': 14,
                                    'size': 2,
-                                   'min': 0x0000,
-                                   'max': 0xFFFF}]),
+                                   'min': spec.tci1_min,
+                                   'max': spec.tci1_max}]),
             RandomUpdate(fields=[{'offset': 18,
                                    'size': 2,
-                                   'min': 0x0000,
-                                   'max': 0xFFFF}]),
+                                   'min': spec.tci2_min,
+                                   'max': spec.tci2_max}]),
         ])
 
     @staticmethod

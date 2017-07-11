@@ -14,12 +14,14 @@ class Dot1QMode(object):
     name = 'dot1q'
 
     class Spec(TrafficSpec):
-        def __init__(self, pkt_size=60, imix=False, **kwargs):
+        def __init__(self, pkt_size=60, tci_min=0, tci_max=0xFFFF, imix=False, **kwargs):
+            super(Dot1QMode.Spec, self).__init__(**kwargs)
             self.pkt_size = pkt_size
             self.imix = imix
-            super(Dot1QMode.Spec, self).__init__(**kwargs)
             self.rx_timestamp_offset = 46
             self.tx_timestamp_offset = 46
+            self.tci_min = tci_min
+            self.tci_max = tci_max
 
         def __str__(self):
             s = super(Dot1QMode.Spec, self).__str__() + '\n'
@@ -58,10 +60,10 @@ class Dot1QMode(object):
             Rewrite(templates=pkt_templates),
             IPChecksum(),
             VLANPush(),
-            RandomUpdate(fields=[{'offset': 14,
+            RandomUpdate(fields=[{'offset': 18,
                                    'size': 2,
-                                   'min': 0x0000,
-                                   'max': 0xFFFF}]),
+                                   'min': spec.tci_min,
+                                   'max': spec.tci_max}]),
         ])
 
     @staticmethod
