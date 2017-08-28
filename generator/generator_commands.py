@@ -533,6 +533,11 @@ def start(cli, port, mode, spec):
         for i, core in enumerate(tx_cores):
             cli.bess.add_worker(wid=core, core=core)
             tx_pipe = tmode.setup_tx_pipeline(cli, port, ts)
+            if getattr(ts, 'ordered', False):
+                if ts.tx_timestamp_offset == 0:
+                    ts.tx_timestamp_offset = 43 # eth + ip + udp + 1
+                if ts.rx_timestamp_offset == 0:
+                    ts.rx_timestamp_offset = 43 # eth + ip + udp + 1
 
             # These modules are required across all pipelines
             tx_pipe.tx_rr = RoundRobin(gates=[0])
