@@ -27,12 +27,21 @@ class UdpMode(object):
 
     class Spec(TrafficSpec):
 
-        def __init__(self, pkt_size=60, num_flows=1, imix=False, vlan=None, **kwargs):
+        def __init__(self, pkt_size=60, num_flows=1, imix=False, vlan=None,
+                     rx_timestamp_offset=0, tx_timestamp_offset=0, **kwargs):
             self.pkt_size = pkt_size
             self.num_flows = num_flows
             self.imix = imix
             self.vlan = vlan
-            super(UdpMode.Spec, self).__init__(**kwargs)
+            if vlan:
+                if not rx_timestamp_offset:
+                    rx_timestamp_offset = 46
+                if not tx_timestamp_offset:
+                    tx_timestamp_offset = 46
+            super(UdpMode.Spec,
+                    self).__init__(rx_timestamp_offset=rx_timestamp_offset,
+                                   tx_timestamp_offset=tx_timestamp_offset,
+                                   **kwargs)
 
         def __str__(self):
             s = super(UdpMode.Spec, self).__str__() + '\n'
