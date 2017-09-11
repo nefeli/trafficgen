@@ -432,7 +432,7 @@ def _connect_pipeline(cli, pipe):
         u = pipe[i]
         if i < len(pipe) - 1:
             v = pipe[i + 1]
-            u.connect(v)
+            u[0].connect(v[0], u[1], v[1])
 
 
 def _create_rate_limit_tree(cli, wid, resource, limit):
@@ -532,15 +532,21 @@ def start(cli, port, mode, spec):
 
         # Setup TX pipelines
         for i, core in enumerate(tx_cores):
-            cli.bess.add_worker(wid=core, core=core)
+            cli.bess.add_worker(wid=core, core=core, scheduler='experimental')
             tx_pipe = tmode.setup_tx_pipeline(cli, port, ts)
 
             # These modules are required across all pipelines
             tx_pipe.tx_rr = RoundRobin(gates=[0])
             tx_pipe.tx_q = Queue()
-            tx_pipe.modules += [tx_pipe.tx_q,
-                                Timestamp(offset=ts.tx_timestamp_offset),
-                                tx_pipe.tx_rr]
+            out_modules = [tx_pipe.tx_q,
+                           Timestamp(offset=ts.tx_timestamp_offset),
+                           tx_pipe.tx_rr]
+            out_zipped = zip(out_modules, [0 for _ in out_modules])
+            _connect_pipeline(cli, out_zipped)
+            for mg in tx_pipe.periphery()[0]:
+                _connect_pipeline(cli, [mg] + out_zipped[:1])
+            tx_pipe.add_modules(out_modules)
+
             q = QueueOut(port=port, qid=i)
             sink = Sink()
             tx_pipe.tx_rr.connect(q, 0, 0)
@@ -548,26 +554,24 @@ def start(cli, port, mode, spec):
             tx_pipes[core] = tx_pipe
 
             # Setup rate limiting, pin pipelines to cores, connect pipelines
-            src = tx_pipe.modules[0]
             if ts.mbps is not None:
                 bps_per_core = long(1e6 * ts.mbps / num_tx_cores)
                 rl_name = \
                     _create_rate_limit_tree(cli, core, 'bit', bps_per_core)
-                cli.bess.attach_module(src.name, wid=core)
                 cli.bess.attach_module(tx_pipe.tx_q.name, rl_name)
             elif ts.pps is not None:
                 pps_per_core = long(ts.pps / num_tx_cores)
                 rl_name = \
                     _create_rate_limit_tree(cli, core, 'packet', pps_per_core)
-                cli.bess.attach_module(src.name, wid=core)
                 cli.bess.attach_module(tx_pipe.tx_q.name, rl_name)
             else:
                 rl_name = None
-                cli.bess.attach_module(src.name, wid=core)
                 cli.bess.attach_module(tx_pipe.tx_q.name, wid=core)
+            if rl_name is not None:
+                tx_pipe.producers().configure(rl_name)
+            tx_pipe.plumb()
             tx_pipe.tc = rl_name
-            _connect_pipeline(cli, tx_pipe.modules)
-            tx_pipe.modules += [q, sink]
+            tx_pipe.add_modules([q, sink])
 
         # Setup RX pipelines
         rx_qids = dict()
@@ -582,7 +586,8 @@ def start(cli, port, mode, spec):
 
         for i, core in enumerate(rx_cores):
             if core not in tx_cores:
-                cli.bess.add_worker(wid=core, core=core)
+                cli.bess.add_worker(wid=core, core=core,
+                                    scheduler='experimental')
             rx_pipe = tmode.setup_rx_pipeline(cli, port, ts)
 
             queues = []
@@ -599,17 +604,20 @@ def start(cli, port, mode, spec):
                 front = [q]
                 cli.bess.attach_module(q.name, wid=core)
 
+            measure_name = 'trafficgen_measure_c{}'.format(core)
             front += [
-                Measure(offset=ts.rx_timestamp_offset, jitter_sample_prob=1.0)]
-            rx_pipe.modules = front + rx_pipe.modules
+                Measure(name=measure_name, offset=ts.rx_timestamp_offset, jitter_sample_prob=1.0)]
+            front_zipped = zip(front, [0 for _ in front])
+            _connect_pipeline(cli, front_zipped)
+            rx_pipe.add_modules(front)
+            ingress = rx_pipe.periphery()[0][0]
+            _connect_pipeline(cli, front_zipped[-1:] + [ingress])
+            rx_pipe.plumb()
 
             rx_pipes[core] = rx_pipe
 
-            # Connect pipelines and pin to cores
-            _connect_pipeline(cli, rx_pipe.modules)
-
             # TODO: maintain queues in a separate structure
-            rx_pipe.modules += queues
+            rx_pipe.add_modules(queues)
 
         cli.bess.resume_all()
 
@@ -629,12 +637,12 @@ def _stop(cli, port):
         try:
             workers = set()
             for core, pipe in sess.tx_pipelines().items():
-                for m in pipe.modules:
+                for m in pipe.modules():
                     cli.bess.destroy_module(m.name)
                 workers.add(core)
 
             for core, pipe in sess.rx_pipelines().items():
-                for m in pipe.modules:
+                for m in pipe.modules():
                     cli.bess.destroy_module(m.name)
                 workers.add(core)
 

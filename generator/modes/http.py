@@ -1,11 +1,13 @@
 import scapy.all as scapy
 
-from generator.common import TrafficSpec, Pipeline, setup_mclasses
+from generator.common import TrafficSpec, Pipeline, RoundRobinProducers, setup_mclasses
+
 
 class HttpMode(object):
     name = 'http'
 
     class Spec(TrafficSpec):
+
         def __init__(self, num_flows=4000, src_port=1001, **kwargs):
             self.num_flows = num_flows
             self.src_port = src_port
@@ -33,8 +35,8 @@ class HttpMode(object):
 
         payload_prefix = 'GET /pub/WWW/TheProject.html HTTP/1.1\r\nHost: www.'
         payload = payload_prefix + 'aaa.com\r\n\r\n'
-        pkt_headers = eth/ip/tcp
-        pkt_template = str(eth/ip/tcp/payload)
+        pkt_headers = eth / ip / tcp
+        pkt_template = str(eth / ip / tcp / payload)
 
         num_cores = len(spec.tx_cores)
         flows_per_core = spec.num_flows / num_cores
@@ -43,20 +45,29 @@ class HttpMode(object):
         else:
             pps_per_core = 5e6
 
-        return Pipeline([
-            FlowGen(template=pkt_template, pps=pps_per_core,
-                    flow_rate=flows_per_core, flow_duration=5,
-                    arrival='uniform', duration='uniform',
-                    quick_rampup=False),
-            RandomUpdate(fields=[{'offset': len(pkt_headers)  + len(payload_prefix),
-                         'size': 1, 'min': 97, 'max': 122}]),
-            RandomUpdate(fields=[{'offset': len(pkt_headers)  + \
-                                            len(payload_prefix) + 1,
-                                  'size': 1, 'min': 97, 'max': 122}]),
-            IPChecksum()
-        ])
+        src = FlowGen(template=pkt_template, pps=pps_per_core,
+                      flow_rate=flows_per_core, flow_duration=5,
+                      arrival='uniform', duration='uniform',
+                      quick_rampup=False)
+        rupdate1 = RandomUpdate(
+            fields=[{'offset': len(pkt_headers) + len(payload_prefix),
+                     'size': 1, 'min': 97, 'max': 122}])
+        rupdate2 = RandomUpdate(fields=[{'offset': len(pkt_headers) +
+                                        len(payload_prefix) + 1,
+                                         'size': 1, 'min': 97, 'max': 122}])
+        cksum = IPChecksum()
+        graph = {
+            (src, 0): (rupdate1, 0),
+            (rupdate1, 0): (rupdate2, 0),
+            (rupdate2, 0): (cksum, 0),
+        }
+        periphery = {0: [(cksum, 0)]}
+        return Pipeline(graph, periphery, RoundRobinProducers([src]))
 
     @staticmethod
     def setup_rx_pipeline(cli, port, spec):
         setup_mclasses(cli, globals())
-        return Pipeline([Sink()])
+        sink = Sink()
+        graph = dict()
+        periphery = {0: [(sink, 0)]}
+        return Pipeline(graph, periphery)

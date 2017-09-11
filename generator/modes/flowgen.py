@@ -1,11 +1,13 @@
 import scapy.all as scapy
 
-from generator.common import TrafficSpec, Pipeline, setup_mclasses
+from generator.common import TrafficSpec, Pipeline, RoundRobinProducers, setup_mclasses
+
 
 class FlowGenMode(object):
     name = 'flowgen'
 
     class Spec(TrafficSpec):
+
         def __init__(self, pkt_size=60, num_flows=10, flow_duration=5,
                      flow_rate=None, arrival='uniform', duration='uniform',
                      src_port=1001, **kwargs):
@@ -40,7 +42,7 @@ class FlowGenMode(object):
         ip = scapy.IP(src=spec.src_ip, dst=spec.dst_ip)
         tcp = scapy.TCP(sport=spec.src_port, dport=12345, seq=12345)
         payload = "meow"
-        DEFAULT_TEMPLATE = str(eth/ip/tcp/payload)
+        DEFAULT_TEMPLATE = str(eth / ip / tcp / payload)
 
         if spec.flow_rate is None:
             spec.flow_rate = spec.num_flows / spec.flow_duration
@@ -54,15 +56,21 @@ class FlowGenMode(object):
             pps_per_core = 5e6
 
         # Setup tx pipeline
-        return Pipeline([
-            FlowGen(template=DEFAULT_TEMPLATE, pps=pps_per_core,
-                    flow_rate=flows_per_core,
-                    flow_duration=spec.flow_duration, arrival=spec.arrival,
-                    duration=spec.duration, quick_rampup=True),
-            IPChecksum()
-        ])
+        src = FlowGen(template=DEFAULT_TEMPLATE, pps=pps_per_core,
+                      flow_rate=flows_per_core,
+                      flow_duration=spec.flow_duration, arrival=spec.arrival,
+                      duration=spec.duration, quick_rampup=True)
+        cksum = IPChecksum()
+        graph = {
+            (src, 0): (cksum, 0),
+        }
+        periphery = {0: [(cksum, 0)]}
+        return Pipeline(graph, periphery, RoundRobinProducers([src]))
 
     @staticmethod
     def setup_rx_pipeline(cli, port, spec):
         setup_mclasses(cli, globals())
-        return Pipeline([Sink()])
+        sink = Sink()
+        graph = dict()
+        periphery = {0: [(sink, 0)]}
+        return Pipeline(graph, periphery)
