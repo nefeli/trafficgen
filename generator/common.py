@@ -254,8 +254,16 @@ class Session(object):
         """
         while not self.__stopmon.is_set():
             if self.__spec.rfc2544_loss_rate is None:
-                self.update_rtt()
-                self.update_port_stats(time.time())
+                try:
+                    with self.__cli.bess_lock:
+                        self.update_rtt()
+                        self.update_port_stats(time.time())
+                except pybess.bess.BESS.APIError as e:
+                    print('BESS API Error (port {}): {}'.format(self.__port, e))
+                    pass
+                except pybess.bess.BESS.Error as e:
+                    print('Error fetching stats from BESS (port {}): {}'.format(self.__port, e))
+                    pass
                 time.sleep(MONITOR_PERIOD)
                 continue
 
@@ -268,8 +276,11 @@ class Session(object):
                         if tx_pipeline.tx_rr is not None:
                             tx_pipeline.tx_rr.set_gates(gates=[0])
                     self._resume()
-            except bess.BESS.APIError as e:
+            except pybess.bess.BESS.APIError as e:
                 print('BESS API Error (port {}): {}'.format(self.__port, e))
+                pass
+            except pybess.bess.BESS.Error as e:
+                print('Error fetching stats from BESS (port {}): {}'.format(self.__port, e))
                 pass
 
             if self._sleep_or_quit(self.__spec.rfc2544_warmup):
@@ -278,8 +289,11 @@ class Session(object):
             try:
                 with self.__cli.bess_lock:
                     self.update_port_stats(time.time())
-            except bess.BESS.APIError as e:
+            except pybess.bess.BESS.APIError as e:
                 print('BESS API Error (port {}): {}'.format(self.__port, e))
+                pass
+            except pybess.bess.BESS.Error as e:
+                print('Error fetching stats from BESS (port {}): {}'.format(self.__port, e))
                 pass
 
             if self._sleep_or_quit(self.__spec.rfc2544_window):
@@ -296,8 +310,11 @@ class Session(object):
                         if tx_pipeline.tx_rr is not None:
                             tx_pipeline.tx_rr.set_gates(gates=[1])
                     self._resume()
-            except bess.BESS.APIError as e:
+            except pybess.bess.BESS.APIError as e:
                 print('BESS API Error (port {}): {}'.format(self.__port, e))
+                pass
+            except pybess.bess.BESS.Error as e:
+                print('Error fetching stats from BESS (port {}): {}'.format(self.__port, e))
                 pass
 
             if self._sleep_or_quit(self.__spec.rfc2544_drain):
