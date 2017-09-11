@@ -73,13 +73,100 @@ def setup_mclasses(cli, globs):
                                                   'choose_arg': _choose_arg})
 
 
+class Producers(object):
+
+    def __init__(self, children):
+        self.__children = children
+
+    def children(self):
+        return self.__children
+
+    def configure(self, cli, parent):
+        pass
+
+
+class RoundRobinProducers(Producers):
+
+    def __init__(self, producers):
+        children = [m.name for m in producers]
+        super(RoundRobinProducers, self).__init__(children)
+
+    def configure(self, cli, parent):
+        root_tc = '{}_rr}'.format(parent)
+        cli.bess.add_tc(root_tc, parent=parent, policy='round_robin')
+        for module in self.__producers:
+            cli.bess.attach_task(module.name, parent=root_tc)
+
+
+class WeightedProducers(Producers):
+
+    def __init__(self, producers):
+        self.__producers = producers
+        children = producers.values()
+        super(WeightedProducers, self).__init__(children)
+
+    def configure(self, cli, parent):
+        root_tc = '{}_weighted'.format(parent)
+        cli.bess.add_tc(root_tc, parent=parent, policy='weighted_fair',
+                        resource='count')
+        for weight, module in self.__producers.items():
+            cli.bess.attach_task(module.name, parent=root_tc, share=weight)
+
+
+class PriorityProducers(Producers):
+
+    def __init__(self, producers):
+        self.__producers = producers
+        children = producers.values()
+        super(PriorityProducers, self).__init__(children)
+
+    def configure(self, cli, parent):
+        root_tc = '{}_pri'.format(parent)
+        cli.bess.add_tc(root_tc, parent=parent, policy='priority',
+                        resource='count')
+        for pri, module in self.__producers.items():
+            cli.bess.attach_task(module.name, parent=root_tc, priority=pri)
+
+
 class Pipeline(object):
 
-    def __init__(self, modules, tc=None):
-        self.modules = modules
-        self.tc = tc
+    def __init__(self, internal_graph, periphery, producers=None):
+        self.__modules = set([x[0] for x in internal_graph.keys()])
+        self.add_modules([x[0] for x in internal_graph.values()])
+        for mgs in periphery.values():
+            self.add_modules([mg[0] for mg in mgs])
+        self.__internal_graph = internal_graph
+        self.__periphery = periphery
+        self.__producers = producers
+        self.tc = None
         self.tx_q = None
         self.tx_rr = None
+
+    def add_modules(self, modules):
+        for m in modules:
+            self.__modules.add(m)
+
+    def modules(self):
+        return self.__modules
+
+    def get_module(self, name):
+        for m in self.__modules:
+            if m.name == name:
+                return m
+        return None
+
+    def inernal_graph(self):
+        return self.__internal_graph
+
+    def periphery(self):
+        return self.__periphery
+
+    def producers(self):
+        return self.__producers
+
+    def plumb(self):
+        for src, dst in self.__internal_graph.items():
+            src[0].connect(dst[0], src[1], dst[1])
 
 
 class TrafficSpec(object):
@@ -375,7 +462,8 @@ class Session(object):
         stats = {'rtt_avg': 0, 'rtt_med': 0, 'rtt_99': 0,
                  'jitter_avg': 0, 'jitter_med': 0, 'jitter_99': 0}
         for core, rx_pipeline in self.__rx_pipelines.items():
-            measure = rx_pipeline.modules[1]
+            measure = rx_pipeline.get_module(
+                'trafficgen_measure_c{}'.format(core))
             now = measure.get_summary()
             measure.clear()
             stats['rtt_avg'] += now.latency_avg_ns
