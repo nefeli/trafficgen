@@ -81,34 +81,53 @@ class Producers(object):
     def children(self):
         return self.__children
 
-    def configure(self, cli, parent):
+    def configure(self, cli, parent=None, wid=None):
         pass
 
 
 class RoundRobinProducers(Producers):
 
     def __init__(self, producers):
+        self.__producers = producers
         children = [m.name for m in producers]
         super(RoundRobinProducers, self).__init__(children)
 
-    def configure(self, cli, parent):
-        root_tc = '{}_rr}'.format(parent)
-        cli.bess.add_tc(root_tc, parent=parent, policy='round_robin')
+    def configure(self, cli, parent=None, wid=None):
+        if (parent is not None and wid is not None) or parent == wid:
+            raise Exception('exactly one of `parent` or `wid` must be set')
+
+        if parent is not None:
+            root_tc = '{}_rr'.format(parent)
+            cli.bess.add_tc(root_tc, parent=parent, policy='round_robin')
+        elif wid is not None:
+            root_tc = 'rr_c{}'.format(wid)
+            cli.bess.add_tc(root_tc, wid=wid, policy='round_robin')
+
         for module in self.__producers:
             cli.bess.attach_task(module.name, parent=root_tc)
 
 
 class WeightedProducers(Producers):
 
-    def __init__(self, producers):
+    def __init__(self, producers, resource='count'):
         self.__producers = producers
+        self.__resource = resource
         children = producers.values()
         super(WeightedProducers, self).__init__(children)
 
-    def configure(self, cli, parent):
-        root_tc = '{}_weighted'.format(parent)
-        cli.bess.add_tc(root_tc, parent=parent, policy='weighted_fair',
-                        resource='count')
+    def configure(self, cli, parent=None, wid=None):
+        if (parent is not None and wid is not None) or parent == wid:
+            raise Exception('exactly one of `parent` or `wid` must be set')
+
+        if parent is not None:
+            root_tc = '{}_weighted'.format(parent)
+            cli.bess.add_tc(root_tc, parent=parent, policy='weighted_fair',
+                            resource=self.__resource)
+        elif wid is not None:
+            root_tc = 'weighted_c{}'.format(wid)
+            cli.bess.add_tc(root_tc, wid=wid, policy='weighted_fair',
+                            resource=self.__resource)
+
         for weight, module in self.__producers.items():
             cli.bess.attach_task(module.name, parent=root_tc, share=weight)
 
@@ -117,13 +136,21 @@ class PriorityProducers(Producers):
 
     def __init__(self, producers):
         self.__producers = producers
+        self.__resource = resource
         children = producers.values()
         super(PriorityProducers, self).__init__(children)
 
-    def configure(self, cli, parent):
-        root_tc = '{}_pri'.format(parent)
-        cli.bess.add_tc(root_tc, parent=parent, policy='priority',
-                        resource='count')
+    def configure(self, cli, parent=None, wid=None):
+        if (parent is not None and wid is not None) or parent == wid:
+            raise Exception('exactly one of `parent` or `wid` must be set')
+
+        if parent is not None:
+            root_tc = '{}_pri'.format(parent)
+            cli.bess.add_tc(root_tc, parent=parent, policy='priority')
+        elif wid is not None:
+            root_tc = 'pri_c{}'.format(wid)
+            cli.bess.add_tc(root_tc, wid=wid, policy='priority')
+
         for pri, module in self.__producers.items():
             cli.bess.attach_task(module.name, parent=root_tc, priority=pri)
 
@@ -346,10 +373,12 @@ class Session(object):
                         self.update_rtt()
                         self.update_port_stats(time.time())
                 except pybess.bess.BESS.APIError as e:
-                    print('BESS API Error (port {}): {}'.format(self.__port, e))
+                    print(
+                        'BESS API Error (port {}): {}'.format(self.__port, e))
                     pass
                 except pybess.bess.BESS.Error as e:
-                    print('Error fetching stats from BESS (port {}): {}'.format(self.__port, e))
+                    print(
+                        'Error fetching stats from BESS (port {}): {}'.format(self.__port, e))
                     pass
                 time.sleep(MONITOR_PERIOD)
                 continue
@@ -367,7 +396,8 @@ class Session(object):
                 print('BESS API Error (port {}): {}'.format(self.__port, e))
                 pass
             except pybess.bess.BESS.Error as e:
-                print('Error fetching stats from BESS (port {}): {}'.format(self.__port, e))
+                print(
+                    'Error fetching stats from BESS (port {}): {}'.format(self.__port, e))
                 pass
 
             if self._sleep_or_quit(self.__spec.rfc2544_warmup):
@@ -380,7 +410,8 @@ class Session(object):
                 print('BESS API Error (port {}): {}'.format(self.__port, e))
                 pass
             except pybess.bess.BESS.Error as e:
-                print('Error fetching stats from BESS (port {}): {}'.format(self.__port, e))
+                print(
+                    'Error fetching stats from BESS (port {}): {}'.format(self.__port, e))
                 pass
 
             if self._sleep_or_quit(self.__spec.rfc2544_window):
@@ -401,7 +432,8 @@ class Session(object):
                 print('BESS API Error (port {}): {}'.format(self.__port, e))
                 pass
             except pybess.bess.BESS.Error as e:
-                print('Error fetching stats from BESS (port {}): {}'.format(self.__port, e))
+                print(
+                    'Error fetching stats from BESS (port {}): {}'.format(self.__port, e))
                 pass
 
             if self._sleep_or_quit(self.__spec.rfc2544_drain):

@@ -558,17 +558,17 @@ def start(cli, port, mode, spec):
                 bps_per_core = long(1e6 * ts.mbps / num_tx_cores)
                 rl_name = \
                     _create_rate_limit_tree(cli, core, 'bit', bps_per_core)
-                cli.bess.attach_module(tx_pipe.tx_q.name, rl_name)
+                cli.bess.attach_module(tx_pipe.tx_q.name, parent=rl_name)
             elif ts.pps is not None:
                 pps_per_core = long(ts.pps / num_tx_cores)
                 rl_name = \
                     _create_rate_limit_tree(cli, core, 'packet', pps_per_core)
-                cli.bess.attach_module(tx_pipe.tx_q.name, rl_name)
+                cli.bess.attach_module(tx_pipe.tx_q.name, parent=rl_name)
             else:
                 rl_name = None
                 cli.bess.attach_module(tx_pipe.tx_q.name, wid=core)
-            if rl_name is not None:
-                tx_pipe.producers().configure(rl_name)
+
+            tx_pipe.producers().configure(cli, wid=core)
             tx_pipe.plumb()
             tx_pipe.tc = rl_name
             tx_pipe.add_modules([q, sink])
