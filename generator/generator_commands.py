@@ -141,14 +141,20 @@ def bind_var(cli, var_type, line):
                 raise cli.BindError('"name" must be [_a-zA-Z][_a-zA-Z0-9]*')
 
     elif var_type == 'portid':
-        if re.match(r'^[\d\.:]*$', val) is None:
-            raise cli.BindError('"name" must be [.:0-9]*')
+        pci = re.match(r'^[0-9a-fA-F]{2}:[0-9a-fA-F]{2}.[0-9a-fA-F]$', val)
+        dpdk_id = re.match(r'[0-9]+', val)
+        if pci is None and dpdk_id is None:
+            raise cli.BindError('"portid" must be a valid BUS:SLOT.FUNCTION'
+                                ' address or an integer')
 
     elif var_type == 'portid+':
         val = sorted(list(set(head.split())))  # collect unique items
-        for name in val:
-            if re.match(r'^[\d\.:]*$', name) is None:
-                raise cli.BindError('"name" must be [.:0-9]*')
+        for v in val:
+            pci = re.match(r'^[0-9a-fA-F]{2}:[0-9a-fA-F]{2}.[0-9a-fA-F]$', v)
+            dpdk_id = re.match(r'[0-9]+', v)
+            if pci is None and dpdk_id is None:
+                raise cli.BindError('"portid" must be a valid BUS:SLOT.FUNCTION'
+                                    ' address or an integer')
 
     elif var_type == 'filename':
         if val.find('\0') >= 0:
@@ -447,7 +453,7 @@ def _create_port_args(cli, port_id, num_rx_cores, num_tx_cores):
             'arg': {'num_inc_q': num_rx_cores, 'num_out_q': num_tx_cores,
                     'size_inc_q': 2048, 'size_out_q': 2048}}
     args['driver'] = 'PMDPort'
-    if re.match(r'^\d\d:\d\d.\d$', port_id) is not None:
+    if re.match(r'^[0-9a-fA-F]{2}:[0-9a-fA-F]{2}.[0-9a-fA-F]$', port_id) is not None:
         args['arg']['pci'] = port_id
     else:
         try:
@@ -629,6 +635,8 @@ def start(cli, port, mode, spec):
 def _stop(cli, port):
     global available_cores
     sess = cli.remove_session(port)
+    if sess is None:
+        return
     sess.stop_monitor()
     reclaimed_cores = sess.spec().tx_cores + sess.spec().rx_cores
     available_cores = list(sorted(available_cores + reclaimed_cores))
