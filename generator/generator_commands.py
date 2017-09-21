@@ -142,7 +142,7 @@ def bind_var(cli, var_type, line):
 
     elif var_type == 'portid':
         pci = re.match(r'^[0-9a-fA-F]{2}:[0-9a-fA-F]{2}.[0-9a-fA-F]$', val)
-        dpdk_id = re.match(r'[0-9]+', val)
+        dpdk_id = re.match(r'^[0-9]+$', val)
         if pci is None and dpdk_id is None:
             raise cli.BindError('"portid" must be a valid BUS:SLOT.FUNCTION'
                                 ' address or an integer')
@@ -151,7 +151,7 @@ def bind_var(cli, var_type, line):
         val = sorted(list(set(head.split())))  # collect unique items
         for v in val:
             pci = re.match(r'^[0-9a-fA-F]{2}:[0-9a-fA-F]{2}.[0-9a-fA-F]$', v)
-            dpdk_id = re.match(r'[0-9]+', v)
+            dpdk_id = re.match(r'^[0-9]+$', v)
             if pci is None and dpdk_id is None:
                 raise cli.BindError('"portid" must be a valid BUS:SLOT.FUNCTION'
                                     ' address or an integer')
