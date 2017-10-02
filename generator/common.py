@@ -513,14 +513,15 @@ class Session(object):
         for core, rx_pipeline in self.__rx_pipelines.items():
             measure = rx_pipeline.get_module(
                 'trafficgen_measure_c{}'.format(core))
-            now = measure.get_summary()
-            measure.clear()
-            stats['rtt_avg'] += now.latency_avg_ns
-            stats['rtt_med'] += now.latency_50_ns
-            stats['rtt_99'] += now.latency_99_ns
-            stats['jitter_avg'] += now.jitter_avg_ns
-            stats['jitter_med'] += now.jitter_50_ns
-            stats['jitter_99'] += now.jitter_99_ns
+            now = measure.get_summary(clear=True,
+                                      latency_percentiles=[50, 99],
+                                      jitter_percentiles=[50, 99])
+            stats['rtt_avg'] += now.latency.avg_ns
+            stats['rtt_med'] += now.latency.percentile_values_ns[0]
+            stats['rtt_99'] += now.latency.percentile_values_ns[1]
+            stats['jitter_avg'] += now.jitter.avg_ns
+            stats['jitter_med'] += now.jitter.percentile_values_ns[0]
+            stats['jitter_99'] += now.jitter.percentile_values_ns[1]
         for k in stats:
             stats[k] /= len(self.__rx_pipelines.keys())
             stats[k] /= 1e3  # convert to us
