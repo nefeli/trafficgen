@@ -523,6 +523,11 @@ def start(cli, port, mode, spec):
     if tmode is None:
         raise cli.CommandError("Mode %s is invalid" % (mode,))
 
+    if spec is None or spec['src_mac'] == ret.mac_addr:
+        cli.fout.write('NOTE: Port %s may filter out returned packets whose '
+                       'source is still the same as its own MAC address %s\n'
+                       % (port, ret.mac_addr))
+
     # Initialize the pipelines
     if spec is not None:
         ts = tmode.Spec(tx_cores=tx_cores, rx_cores=rx_cores, **spec)
