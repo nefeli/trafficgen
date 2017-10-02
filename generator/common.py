@@ -528,9 +528,7 @@ class Session(object):
         return stats
 
     def update_rtt(self, ignore=False):
-        self._pause()
         ret = self._get_rtt()
         if not ignore:
             self.__curr_rtt = ret
-        self._resume()
         self.__last_check = self.__now
