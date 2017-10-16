@@ -1,0 +1,9 @@
+// Copyright (c) 2018, Nefeli Networks, Inc. All rights reserved.
+
+syntax = "proto3";
+
+package trafficgen.pb;
+
+message ArpBlastArg {
+    string sha = 1;
+}

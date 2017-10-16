@@ -16,6 +16,7 @@ from ruamel.yaml import YAML
 import scapy.all as scapy
 import signal
 import socket
+import struct
 import subprocess
 import sys
 import tempfile
@@ -98,6 +99,17 @@ def get_var_attrs(cli, var_token, partial_word):
             var_type = 'filename'
             var_desc = 'a path to a csv file'
 
+        elif var_token == 'RATE':
+            var_type = 'rate'
+            var_desc = 'a rate in either packets or bits per second'
+
+        elif var_token == 'DURATION':
+            var_type = 'duration'
+            var_desc = 'a duration in milliseconds (ms) or seconds (s)'
+
+        elif var_token == 'NUMBER':
+            var_type = 'int'
+
         elif var_token == 'CONF_FILE':
             var_type = 'filename'
             var_desc = 'configuration filename'
@@ -124,7 +136,7 @@ def get_var_attrs(cli, var_token, partial_word):
 
 
 def split_var(cli, var_type, line):
-    if var_type in ['name', 'filename', 'endis', 'int', 'portid']:
+    if var_type in ['name', 'filename', 'endis', 'int', 'portid', 'rate', 'duration']:
         pos = line.find(' ')
         if pos == -1:
             head = line
@@ -220,8 +232,29 @@ def bind_var(cli, var_type, line):
         except Exception:
             raise cli.BindError('Expected an integer')
 
+    elif var_type == 'rate':
+        test = re.match(r'^[0-9]+\.?[0-9]*[kMG][bp]ps$', val)
+        if test is None:
+            raise cli.BindError('"rate" must match "^[0-9]+[kMG][bp]ps$')
+
+    elif var_type == 'duration':
+        test = re.match(r'^[0-9]+\.?[0-9]*[m]?s$', val)
+        if test is None:
+            raise cli.BindError('"duration" must match "^[0-9]+[m]?s$')
+
     return val, remainder
 
+
+def parse_rate_str(s):
+    parts = re.match(r'^([0-9]+\.?[0-9]*)([kMG])([bp]ps)$', s).groups()
+    multiplier = {'k': 10**3, 'M': 10**6, 'G': 10**9}
+    return (int(float(parts[0]) * multiplier[parts[1]]), parts[2])
+
+
+def parse_duration_str(s):
+    parts = re.match(r'^([0-9]+\.?[0-9]*)([m]?)s$', s).groups()
+    div = 1000.0 if parts[1] == 'm' else 1.0
+    return float(parts[0]) / div
 
 bessctl_cmds = [
     'monitor pipeline',
@@ -289,7 +322,7 @@ PortRate = collections.namedtuple('PortRate',
                                    'out_packets', 'out_dropped', 'out_bytes'])
 
 
-def _monitor_ports(cli, *ports):
+def _monitor_ports(cli, duration, *ports):
     global stats_csv
 
     def get_delta(old, new):
@@ -412,7 +445,7 @@ def _monitor_ports(cli, *ports):
                                  'avg_jit_us', 'med_jit_us', '99th_jit_us',
                                  'out_mbps', 'out_mpps', 'out_dropped']) + '\n'
 
-    with open(stats_csv, 'a') as f:
+    with open(stats_csv, 'a+') as f:
         for port in ports:
             line = '#port ' + port + ': '
             line += str(cli.get_session(port).spec()).replace('\n', '; ')
@@ -424,6 +457,7 @@ def _monitor_ports(cli, *ports):
         sess = cli.get_session(port)
         last[port] = get_all_stats(cli, sess)
     try:
+        stop_time = None if duration is None else time.time() + duration
         while True:
             time.sleep(1)
 
@@ -447,18 +481,27 @@ def _monitor_ports(cli, *ports):
 
             for port in ports:
                 last[port] = now[port]
+
+            if stop_time is not None and time.time() >= stop_time:
+                break
     except KeyboardInterrupt:
         pass
 
 
 @cmd('monitor port', 'Monitor the current traffic of all ports')
 def monitor_port_all(cli):
-    _monitor_ports(cli)
+    _monitor_ports(cli, None)
+
+
+@cmd('monitor ports for DURATION', 'Monitor the current traffic of all ports for some duration')
+def monitor_ports_for(cli, dur):
+    dur = parse_duration_str(dur)
+    _monitor_ports(cli, dur)
 
 
 @cmd('monitor port PORT...', 'Monitor the current traffic of specified ports')
-def monitor_port_all(cli, ports):
-    _monitor_ports(cli, *ports)
+def monitor_port(cli, ports):
+    _monitor_ports(cli, None, *ports)
 
 
 @cmd('set csv CSV', 'Set the CSV file for stats output')
@@ -484,7 +527,7 @@ def _create_rate_limit_tree(cli, wid, resource, limit):
 
 def _create_port_args(cli, port_id, num_rx_cores, num_tx_cores):
     args = {'driver': None, 'name': port_id,
-            'arg': {'num_inc_q': num_rx_cores, 'num_out_q': num_tx_cores,
+            'arg': {'num_inc_q': num_rx_cores, 'num_out_q': num_tx_cores + num_rx_cores,
                     'size_inc_q': 2048, 'size_out_q': 2048}}
     args['driver'] = 'PMDPort'
     if re.match(r'^[0-9a-fA-F]{2}:[0-9a-fA-F]{2}.[0-9a-fA-F]$', port_id) is not None:
@@ -528,9 +571,13 @@ def _start(cli, port, mode, tmode, ts):
         port_out = PortOut(port=port)
 
         for i, core in enumerate(ts.tx_cores):
+            s = copy.copy(ts)
+            if 'testing' in mode:
+                s.flow_rate /= len(ts.tx_cores)
+                s.core = core
             cli.bess.add_worker(wid=core, core=core, scheduler='experimental')
             tx_pipe = Pipeline()
-            tmode.setup_tx_pipeline(cli, port, ts, tx_pipe)
+            tmode.setup_tx_pipeline(cli, port, s, tx_pipe)
 
             # These modules are required across all pipelines
             tx_pipe.tx_rr = RoundRobin(gates=[0])
@@ -585,7 +632,7 @@ def _start(cli, port, mode, tmode, ts):
                 cli.bess.add_worker(wid=core, core=core,
                                     scheduler='experimental')
             rx_pipe = Pipeline()
-            tmode.setup_rx_pipeline(cli, port, ts, rx_pipe)
+            tmode.setup_rx_pipeline(cli, port, ts, rx_pipe, port_out)
 
             queues = []
             if core in rx_qids and len(rx_qids[core]) > 1:
@@ -747,3 +794,77 @@ def _stop(cli, port):
 def stop(cli, ports):
     for port in ports:
         _stop(cli, port)
+
+
+@cmd('set rate PORT RATE', 'Change the sending rate of a port')
+def set_rate(cli, port, rate):
+    sess = cli.get_session(port)
+    if sess is None:
+        print('port "{}" is not running'.format(port))
+        return
+    sess.set_rate(*parse_rate_str(rate))
+
+
+# XXX: EVIL EVIL EVIL
+@cmd('set flows PORT NUMBER', 'Set the number of flows')
+def set_flows(cli, port, flows):
+    def atoh(ip):
+        return struct.unpack("!L", socket.inet_aton(ip))[0]
+
+    sess = cli.get_session(port)
+    if sess is None:
+        print('port "{}" is not running'.format(port))
+        return
+    if sess.mode() not in ('testing', 'udp'):
+        print('not supported')
+        return
+    num_cores = len(sess.tx_pipelines())
+    flows_per_core = int(flows) / num_cores
+
+    spec = sess.spec()
+    dst_ip = atoh(spec.dst_ip)
+    dst_ip_offset = 30
+    if spec.vlan:
+        dst_ip_offset += 4
+
+    with sess.cli().bess_lock:
+        sess._pause()
+        for core, pipe in sess.tx_pipelines().items():
+            for m in pipe.modules():
+                if 'rupdate' not in m.name:
+                    continue
+                m.clear()
+                m.add(fields=[{'offset': dst_ip_offset,
+                               'size': 4,
+                               'min': dst_ip,
+                               'max': dst_ip + flows_per_core - 1}])
+        sess._resume()
+
+
+# XXX: EVIL EVIL EVIL
+@cmd('set flow_rate PORT NUMBER RATE', 'Set the flow arrival rate')
+def set_flow_rate(cli, port, flow_rate, pps_per_flow):
+    sess = cli.get_session(port)
+    if sess is None:
+        print('port "{}" is not running'.format(port))
+        return
+    if sess.mode() not in ('testing'):
+        print('not supported')
+        return
+
+    spec = copy.copy(sess.spec())
+    spec.flow_rate = flow_rate
+    spec.pps_per_flow = parse_rate_str(pps_per_flow)[0]
+    spec.flow_rate /= len(sess.tx_pipelines())
+
+    with sess.cli().bess_lock:
+        sess._pause()
+        for core, pipe in sess.tx_pipelines().items():
+            spec.core = core
+            args = modes.TestingMode.make_args(spec)
+            for m in pipe.modules():
+                if 'flowgen_fwd' in m.name:
+                    m.update(**args['fwd'])
+                if 'flowgen_rev' in m.name:
+                    m.update(**args['rev'])
+        sess._resume()

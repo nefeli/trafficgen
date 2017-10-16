@@ -84,6 +84,6 @@ class Dot1ADMode(object):
         pipeline.set_producers(RoundRobinProducers([src]))
 
     @staticmethod
-    def setup_rx_pipeline(cli, port, spec, pipeline):
+    def setup_rx_pipeline(cli, port, spec, pipeline, port_out):
         setup_mclasses(cli, globals())
         pipeline.add_peripheral_edge(0, Sink(), 0)

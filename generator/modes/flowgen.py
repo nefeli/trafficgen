@@ -9,7 +9,7 @@ class FlowGenMode(object):
     class Spec(TrafficSpec):
 
         def __init__(self, pkt_size=60, num_flows=10, flow_duration=5,
-                     flow_rate=None, arrival='uniform', duration='uniform',
+                     flow_rate=1, arrival='uniform', duration='uniform',
                      src_port=1001, **kwargs):
             self.pkt_size = pkt_size
             self.num_flows = num_flows
@@ -18,6 +18,7 @@ class FlowGenMode(object):
             self.arrival = arrival
             self.duration = duration
             self.src_port = src_port
+            self.flow_rate = flow_rate
             super(FlowGenMode.Spec, self).__init__(**kwargs)
 
         def __str__(self):
@@ -28,7 +29,8 @@ class FlowGenMode(object):
                 ('flow_duration', lambda x: str(x) if x else 'auto'),
                 ('arrival', lambda x: str(x)),
                 ('duration', lambda x: str(x)),
-                ('src_port', lambda x: str(x))
+                ('src_port', lambda x: str(x)),
+                ('flow_rate', lambda x: str(x))
             ]
             return s + self._attrs_to_str(attrs, 25)
 
@@ -57,15 +59,16 @@ class FlowGenMode(object):
 
         # Setup tx pipeline
         src = FlowGen(template=DEFAULT_TEMPLATE, pps=pps_per_core,
-                      flow_rate=flows_per_core,
+                      flow_rate=spec.flow_rate,
                       flow_duration=spec.flow_duration, arrival=spec.arrival,
-                      duration=spec.duration, quick_rampup=True)
+                      duration=spec.duration, quick_rampup=False,
+                      port_src_range=flows_per_core)
         cksum = IPChecksum()
         pipeline.add_edge(src, 0, cksum, 0)
         pipeline.add_peripheral_edge(0, cksum, 0)
         pipeline.set_producers(RoundRobinProducers([src]))
 
     @staticmethod
-    def setup_rx_pipeline(cli, port, spec, pipeline):
+    def setup_rx_pipeline(cli, port, spec, pipeline, port_out):
         setup_mclasses(cli, globals())
         pipeline.add_peripheral_edge(0, Sink(), 0)
