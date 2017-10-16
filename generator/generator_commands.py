@@ -69,6 +69,10 @@ def get_var_attrs(cli, var_token, partial_word):
             var_type = 'filename'
             var_desc = 'a path to a csv file'
 
+        elif var_token == 'RATE':
+            var_type = 'rate'
+            var_desc = 'a rate in either packets or bits per second'
+
     except socket.error as e:
         if e.errno in [errno.ECONNRESET, errno.EPIPE]:
             cli.bess.disconnect()
@@ -90,7 +94,7 @@ def get_var_attrs(cli, var_token, partial_word):
 
 
 def split_var(cli, var_type, line):
-    if var_type in ['name', 'filename', 'endis', 'int', 'portid']:
+    if var_type in ['name', 'filename', 'endis', 'int', 'portid', 'rate']:
         pos = line.find(' ')
         if pos == -1:
             head = line
@@ -185,6 +189,11 @@ def bind_var(cli, var_type, line):
             val = int(val)
         except Exception:
             raise cli.BindError('Expected an integer')
+
+    elif var_type == 'rate':
+        test = re.match(r'^[0-9]+[kMG][bp]ps$', val)
+        if test is None:
+            raise cli.BindError('"rate" must match "^[0-9]+[kMG][bp]ps$')
 
     return val, remainder
 
@@ -671,3 +680,18 @@ def _stop(cli, port):
 def stop(cli, ports):
     for port in ports:
         _stop(cli, port)
+
+
+def parse_rate_str(s):
+    parts = re.match(r'^([0-9]+)([kMG])([bp]ps)$', s).groups()
+    multiplier = {'k': int(10e3), 'M': int(10e6), 'G': int(10e9)}
+    return (int(parts[0]) * multiplier[parts[1]], parts[2])
+
+
+@cmd('set rate PORT RATE', 'Change the sending rate of a port')
+def set_rate(cli, port, rate):
+    sess = cli.get_session(port)
+    if sess is None:
+        print('port "{}" is not running'.format(port))
+        return
+    sess.set_rate(*parse_rate_str(rate))

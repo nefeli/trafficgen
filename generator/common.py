@@ -492,11 +492,38 @@ class Session(object):
         for core, tx_pipeline in self.__tx_pipelines.items():
             tc = tx_pipeline.tc
             if tc is None:
-                print(pps_per_core)
                 tx_pipeline.modules[0].update(pps=pps_per_core)
             else:
                 self.__bess.update_tc_params(tc, resource='packet',
                                              limit={'packet': long(pps_per_core)})
+
+    def set_rate(self, rate, units):
+        """
+        Set the sending rate of this session.
+
+        rate -- the new rate to use. must be >= 0
+        units -- the units of `rate`. either 'pps' or 'bps'
+        """
+        resources = {'pps': 'packet', 'bps': 'bit'}
+        if units not in resources:
+            print('"units" must be one of "{}"'.format(
+                ' '.join(resources.keys())))
+            return
+        resource = resources[units]
+
+        with self.__cli.bess_lock:
+            self._pause()
+            num_cores = len(self.__tx_pipelines.keys())
+            rate_per_core = rate / num_cores
+            for core, tx_pipeline in self.__tx_pipelines.items():
+                tc = tx_pipeline.tc
+                if tc is None:
+                    print('not supported')
+                    return
+                limit = {resource: long(rate_per_core)}
+                self.__bess.update_tc_params(
+                    tc, resource=resource, limit=limit)
+            self._resume()
 
     def update_port_stats(self, now=None):
         if self.__last_stats is not None:
