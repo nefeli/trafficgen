@@ -65,3 +65,12 @@ stop PORT...                                      Stop sending packets on a set 
 
 See the [advanced guide](AdvancedGuide.md) for how to generate different types
 of traffic.
+
+## Summarizing Results
+
+To pretty-print a summary of trafficgen results, run `summarize.py` on the CSV output:
+
+```
+cd scripts
+./summarize.py <CSV file>
+```
