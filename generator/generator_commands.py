@@ -207,6 +207,17 @@ def bind_var(cli, var_type, line):
     return val, remainder
 
 
+def parse_rate_str(s):
+    parts = re.match(r'^([0-9]+)([kMG])([bp]ps)$', s).groups()
+    multiplier = {'k': int(10e3), 'M': int(10e6), 'G': int(10e9)}
+    return (int(parts[0]) * multiplier[parts[1]], parts[2])
+
+
+def parse_duration_str(s):
+    parts = re.match(r'^([0-9]+\.?[0-9]*)([m]?)s$', s).groups()
+    div = 1000.0 if parts[1] == 'm' else 1.0
+    return float(parts[0]) / div
+
 bessctl_cmds = [
     'monitor pipeline',
 ]
@@ -273,7 +284,7 @@ PortRate = collections.namedtuple('PortRate',
                                    'out_packets', 'out_dropped', 'out_bytes'])
 
 
-def _monitor_ports(cli, *ports):
+def _monitor_ports(cli, duration, *ports):
     global stats_csv
 
     def get_delta(old, new):
@@ -408,6 +419,7 @@ def _monitor_ports(cli, *ports):
         sess = cli.get_session(port)
         last[port] = get_all_stats(cli, sess)
     try:
+        stop_time = None if duration is None else time.time() + duration
         while True:
             time.sleep(1)
 
@@ -431,18 +443,27 @@ def _monitor_ports(cli, *ports):
 
             for port in ports:
                 last[port] = now[port]
+
+            if stop_time is not None and time.time() >= stop_time:
+                break
     except KeyboardInterrupt:
         pass
 
 
 @cmd('monitor port', 'Monitor the current traffic of all ports')
 def monitor_port_all(cli):
-    _monitor_ports(cli)
+    _monitor_ports(cli, None)
+
+
+@cmd('monitor ports for DURATION', 'Monitor the current traffic of all ports for some duration')
+def monitor_ports_for(cli, dur):
+    dur = parse_duration_str(dur)
+    _monitor_ports(cli, dur)
 
 
 @cmd('monitor port PORT...', 'Monitor the current traffic of specified ports')
-def monitor_port_all(cli, ports):
-    _monitor_ports(cli, *ports)
+def monitor_port(cli, ports):
+    _monitor_ports(cli, None, *ports)
 
 
 @cmd('set csv CSV', 'Set the CSV file for stats output')
@@ -691,12 +712,6 @@ def stop(cli, ports):
         _stop(cli, port)
 
 
-def parse_rate_str(s):
-    parts = re.match(r'^([0-9]+)([kMG])([bp]ps)$', s).groups()
-    multiplier = {'k': int(10e3), 'M': int(10e6), 'G': int(10e9)}
-    return (int(parts[0]) * multiplier[parts[1]], parts[2])
-
-
 @cmd('set rate PORT RATE', 'Change the sending rate of a port')
 def set_rate(cli, port, rate):
     sess = cli.get_session(port)
@@ -705,10 +720,6 @@ def set_rate(cli, port, rate):
         return
     sess.set_rate(*parse_rate_str(rate))
 
-def parse_duration_str(s):
-    parts = re.match(r'^([0-9]+\.?[0-9]*)([m]?)s$', s).groups()
-    div = 1000.0 if parts[1] == 'm' else 1.0
-    return float(parts[0]) / div
 
 @cmd('wait DURATION', 'Sleep for some duration (useful for sripting).')
 def cmd_wait(cli, dur):
