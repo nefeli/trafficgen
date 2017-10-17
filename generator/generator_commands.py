@@ -73,6 +73,10 @@ def get_var_attrs(cli, var_token, partial_word):
             var_type = 'rate'
             var_desc = 'a rate in either packets or bits per second'
 
+        elif var_token == 'DURATION':
+            var_type = 'duration'
+            var_desc = 'a duration in milliseconds (ms) or seconds (s)'
+
     except socket.error as e:
         if e.errno in [errno.ECONNRESET, errno.EPIPE]:
             cli.bess.disconnect()
@@ -94,7 +98,7 @@ def get_var_attrs(cli, var_token, partial_word):
 
 
 def split_var(cli, var_type, line):
-    if var_type in ['name', 'filename', 'endis', 'int', 'portid', 'rate']:
+    if var_type in ['name', 'filename', 'endis', 'int', 'portid', 'rate', 'duration']:
         pos = line.find(' ')
         if pos == -1:
             head = line
@@ -194,6 +198,11 @@ def bind_var(cli, var_type, line):
         test = re.match(r'^[0-9]+[kMG][bp]ps$', val)
         if test is None:
             raise cli.BindError('"rate" must match "^[0-9]+[kMG][bp]ps$')
+
+    elif var_type == 'duration':
+        test = re.match(r'^[0-9]+\.?[0-9]*[m]?s$', val)
+        if test is None:
+            raise cli.BindError('"duration" must match "^[0-9]+[m]?s$')
 
     return val, remainder
 
@@ -695,3 +704,13 @@ def set_rate(cli, port, rate):
         print('port "{}" is not running'.format(port))
         return
     sess.set_rate(*parse_rate_str(rate))
+
+def parse_duration_str(s):
+    parts = re.match(r'^([0-9]+\.?[0-9]*)([m]?)s$', s).groups()
+    div = 1000.0 if parts[1] == 'm' else 1.0
+    return float(parts[0]) / div
+
+@cmd('wait DURATION', 'Sleep for some duration (useful for sripting).')
+def cmd_wait(cli, dur):
+    dur = parse_duration_str(dur)
+    time.sleep(dur)
