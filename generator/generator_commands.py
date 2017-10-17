@@ -1,5 +1,6 @@
 import collections
 import copy
+import datetime
 import errno
 import fcntl
 import fnmatch
@@ -307,7 +308,7 @@ def _monitor_ports(cli, *ports):
 
         with open(stats_csv, 'a+') as f:
             line = '%s,%s,%.1f,%.3f,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.3f,%d\n'
-            line %= (time.strftime('%X') + str(timestamp % 1)[1:8],) + stats
+            line %= (datetime.datetime.now().isoformat(),) + stats
             f.write(line)
 
     def get_total(arr):
