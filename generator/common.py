@@ -269,13 +269,10 @@ class TrafficSpec(object):
 
 class Session(object):
 
-    """
-    docstring
-    """
-
-    def __init__(self, port, spec, mode, tx_pipelines, rx_pipelines, bess, cli):
+    def __init__(self, tx_port, rx_port, spec, mode, tx_pipelines, rx_pipelines, bess, cli):
         now = time.time()
-        self.__port = port
+        self.__tx_port = tx_port
+        self.__rx_port = rx_port
         self.__spec = spec
         self.__mode = mode
         self.__curr_stats = None
@@ -313,8 +310,11 @@ class Session(object):
             self.__stopmon.set()
             self.__monitor_thread.join()
 
-    def port(self):
-        return self.__port
+    def tx_port(self):
+        return self.__tx_port
+
+    def rx_port(self):
+        return self.__rx_port
 
     def spec(self):
         return self.__spec
@@ -501,7 +501,12 @@ class Session(object):
     def update_port_stats(self, now=None):
         if self.__last_stats is not None:
             self.__last_stats = self.__curr_stats
-        self.__curr_stats = self.__bess.get_port_stats(self.__port)
+        self.__curr_stats = self.__cli.bess.get_port_stats(self.__tx_port)
+        if self.__rx_port != self.__tx_port:
+            rx_stats = self.__cli.bess.get_port_stats(self.__rx_port)
+            self.__curr_stats.inc.packets = rx_stats.inc.packets
+            self.__curr_stats.inc.bytes = rx_stats.inc.bytes
+            self.__curr_stats.inc.dropped = rx_stats.inc.dropped
         if self.__last_stats is None:
             self.__last_stats = self.__curr_stats
         self.__last_check = self.__now
