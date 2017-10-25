@@ -306,7 +306,7 @@ def _monitor_ports(cli, *ports):
         cli.fout.write('%-20s%14.1f%10.3f%10d%15.3f%15.3f%15.3f%15.3f%15.3f%15.3f        '
                        '%14.1f%10.3f%10d\n' % stats)
 
-        with open(stats_csv, 'a+') as f:
+        with open(stats_csv, 'a') as f:
             line = '%s,%s,%.1f,%.3f,%d,%.3f,%.3f,%.3f,%.3f,%.3f,%.3f,%.1f,%.3f,%d\n'
             line %= (datetime.datetime.now().isoformat(),) + stats
             f.write(line)
@@ -379,7 +379,7 @@ def _monitor_ports(cli, *ports):
                                  'avg_jit_us', 'med_jit_us', '99th_jit_us',
                                  'out_mbps', 'out_mpps', 'out_dropped']) + '\n'
 
-    with open(stats_csv, 'w+') as f:
+    with open(stats_csv, 'a') as f:
         for port in ports:
             line = '#port ' + port + ': '
             line += str(cli.get_session(port).spec()).replace('\n', '; ')
