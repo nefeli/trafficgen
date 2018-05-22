@@ -1,0 +1,4 @@
+[submodule "bess"]
+	path = bess
+	url = git@github.com:netsys/bess.git
+	branch = master
