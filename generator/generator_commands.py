@@ -543,6 +543,8 @@ def start(cli, port, mode, spec):
         cli.bess.pause_all()
 
         # Setup TX pipelines
+        port_out = PortOut(port=port)
+
         for i, core in enumerate(tx_cores):
             cli.bess.add_worker(wid=core, core=core, scheduler='experimental')
             tx_pipe = tmode.setup_tx_pipeline(cli, port, ts)
@@ -559,9 +561,8 @@ def start(cli, port, mode, spec):
                 _connect_pipeline(cli, [mg] + out_zipped[:1])
             tx_pipe.add_modules(out_modules)
 
-            q = QueueOut(port=port, qid=i)
             sink = Sink()
-            tx_pipe.tx_rr.connect(q, 0, 0)
+            tx_pipe.tx_rr.connect(port_out, 0, 0)
             tx_pipe.tx_rr.connect(sink, 1, 0)
             tx_pipes[core] = tx_pipe
 
@@ -583,7 +584,7 @@ def start(cli, port, mode, spec):
             tx_pipe.producers().configure(cli, wid=core)
             tx_pipe.plumb()
             tx_pipe.tc = rl_name
-            tx_pipe.add_modules([q, sink])
+            tx_pipe.add_modules([sink])
 
         # Setup RX pipelines
         rx_qids = dict()
@@ -633,7 +634,7 @@ def start(cli, port, mode, spec):
 
         cli.bess.resume_all()
 
-    sess = Session(port, ts, mode, tx_pipes, rx_pipes, cli.bess, cli)
+    sess = Session(port, port_out, ts, mode, tx_pipes, rx_pipes, cli.bess, cli)
     sess.start_monitor()
     cli.add_session(sess)
 
@@ -663,6 +664,7 @@ def _stop(cli, port):
             for worker in workers:
                 cli.bess.destroy_worker(worker)
 
+            cli.bess.destroy_module(sess.port_out().name)
             cli.bess.destroy_port(sess.port())
         finally:
             cli.bess.resume_all()
