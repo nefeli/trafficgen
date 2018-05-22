@@ -4,8 +4,6 @@ A traffic generator built on [BESS](https://github.com/NetSys/bess).
 
 ## Setup
 
-First, you'll need to install [BESS](https://github.com/NetSys/bess).
-
 `trafficgen` requires Scapy v2.3.3+ to generate Dot1AD packets.
 However, Scapy v2.3.3 has a breaking IPv6 bug.
 Until v2.3.4 is released, we recommend installing the dev version of Scapy v2.3.3
@@ -20,16 +18,22 @@ http://dpdk.org/doc/guides/linux_gsg/sys_reqs.html#reserving-hugepages-for-dpdk-
 recommended since it can be configured without system reboot and the
 performance difference compared to 1GB ones is negligible.
 
-After setting up BESS, bind any NICs you want to generate traffic on to DPDK.
-Take note of their PCIe addresses.
+Bind any NICs you want to generate traffic on to DPDK and take note of their PCIe addresses.
+
+Finally, clone this repo and build BESS with the trafficgen plugins. See the
+[BESS Wiki](https://github.com/NetSys/bess/wiki/Build-and-Install-BESS) for notes about build dependencies.
+
+```
+$ git clone --recursive git@github.com:nefelinetworks/trafficgen.git
+$ cd trafficgen
+$ make
+```
 
 ## Running
 
 After setting things up, generating traffic is simple.
 
 ```
-$ git clone git@github.com:nefelinetworks/trafficgen.git
-$ export BESS_PATH=/path/to/bess
 $ ./run.py
 Type "help" for more information.
 Starting BESS...
