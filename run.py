@@ -1,5 +1,5 @@
-#!/usr/bin/env python2.7
-import cStringIO
+#!/usr/bin/env python3
+import io
 import sys
 
 import generator
@@ -20,4 +20,4 @@ if __name__ == '__main__':
                 line_buf.append(arg)
 
         cmds.append(' '.join(line_buf))
-        run_cmds(cStringIO.StringIO('\n'.join(cmds)))
+        run_cmds(io.StringIO('\n'.join(cmds)))

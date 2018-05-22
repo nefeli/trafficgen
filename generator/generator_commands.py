@@ -23,8 +23,8 @@ import traceback
 import commands as bess_commands
 from pybess.module import *
 
-from common import *
-import modes
+from generator.common import *
+import generator.modes
 
 available_cores = list(range(multiprocessing.cpu_count()))
 
@@ -194,7 +194,7 @@ bessctl_cmds = [
     'monitor pipeline',
 ]
 
-cmdlist = filter(lambda x: x[0] in bessctl_cmds, bess_commands.cmdlist)
+cmdlist = list(filter(lambda x: x[0] in bessctl_cmds, bess_commands.cmdlist))
 
 
 def cmd(syntax, desc=''):
@@ -516,8 +516,8 @@ def start(cli, port, mode, spec):
 
     # Find traffic mode
     tmode = None
-    for x in modes.__dict__:
-        m = modes.__dict__[x]
+    for x in generator.modes.__dict__:
+        m = generator.modes.__dict__[x]
         if getattr(m, 'name', '') == mode:
             tmode = m
 
@@ -555,7 +555,7 @@ def start(cli, port, mode, spec):
             out_modules = [tx_pipe.tx_q,
                            Timestamp(offset=ts.tx_timestamp_offset),
                            tx_pipe.tx_rr]
-            out_zipped = zip(out_modules, [0 for _ in out_modules])
+            out_zipped = list(zip(out_modules, [0 for _ in out_modules]))
             _connect_pipeline(cli, out_zipped)
             for mg in tx_pipe.periphery()[0]:
                 _connect_pipeline(cli, [mg] + out_zipped[:1])
@@ -620,7 +620,7 @@ def start(cli, port, mode, spec):
             measure_name = 'trafficgen_measure_c{}'.format(core)
             front += [
                 Measure(name=measure_name, offset=ts.rx_timestamp_offset, jitter_sample_prob=1.0)]
-            front_zipped = zip(front, [0 for _ in front])
+            front_zipped = list(zip(front, [0 for _ in front]))
             _connect_pipeline(cli, front_zipped)
             rx_pipe.add_modules(front)
             ingress = rx_pipe.periphery()[0][0]

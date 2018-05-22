@@ -13,5 +13,5 @@ try:
     import pybess.bess
     import cli
 except ImportError:
-    print >> sys.stderr, 'Cannot import the API module (pybess)'
+    print('Cannot import the API module (pybess)', sys.stderr)
     raise
