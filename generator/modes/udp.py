@@ -19,7 +19,7 @@ def _build_pkt(spec, size):
         dot1q = scapy.Dot1Q(vlan=spec.vlan)
         pkt = pkt / dot1q
     pkt = pkt / ip / udp / payload
-    return str(pkt)
+    return bytes(pkt)
 
 
 class UdpMode(object):

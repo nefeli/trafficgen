@@ -9,7 +9,7 @@ def _build_pkt(spec, size):
     udp = scapy.UDP(sport=10001, dport=10002, chksum=0)
     pkt = eth / ip / udp
     payload = ('hello' + '0123456789' * 200)[:size - len(pkt)]
-    return str(pkt / payload)
+    return bytes(pkt / payload)
 
 
 class Dot1ADMode(object):

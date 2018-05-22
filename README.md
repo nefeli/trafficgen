@@ -4,14 +4,6 @@ A traffic generator built on [BESS](https://github.com/NetSys/bess).
 
 ## Setup
 
-`trafficgen` requires Scapy v2.3.3+ to generate Dot1AD packets.
-However, Scapy v2.3.3 has a breaking IPv6 bug.
-Until v2.3.4 is released, we recommend installing the dev version of Scapy v2.3.3
-which includes the bug fix.
-```
-$ pip install git+https://github.com/secdev/scapy
-```
-
 Like any other DPDK applications, you need to [set up hugepages](
 http://dpdk.org/doc/guides/linux_gsg/sys_reqs.html#reserving-hugepages-for-dpdk-use)
 -- by default, BESS requires 2GB per CPU socket. Using 2MB hugepages is
@@ -26,6 +18,7 @@ Finally, clone this repo and build BESS with the trafficgen plugins. See the
 ```
 $ git clone --recursive git@github.com:nefelinetworks/trafficgen.git
 $ cd trafficgen
+$ pip3 install -r requirements.txt
 $ make
 ```
 

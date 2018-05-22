@@ -1,4 +1,3 @@
-import cStringIO
 import errno
 import os
 import pprint
@@ -12,8 +11,8 @@ import cli
 from pybess.module import *
 
 import commands as bess_commands
-import generator_commands
-from common import *
+import generator.generator_commands as generator_commands
+from generator.common import *
 
 
 class TGENCLI(cli.CLI):
@@ -125,7 +124,7 @@ class TGENCLI(cli.CLI):
 
     def get_prompt(self):
         if self.bess.is_connected():
-            return '%s:%d $ ' % self.bess.peer
+            return '{} $ '.format(self.bess.peer)
 
         if self.bess.is_connection_broken():
             self._handle_broken_connection()
@@ -161,7 +160,7 @@ def run_cli():
         hist_file = os.path.expanduser('~/.trafficgen_history')
         open(hist_file, 'a+').close()
     except:
-        print >> stderr, 'Error: Cannot open ~/.trafficgen_history'
+        print('Error: Cannot open ~/.trafficgen_history', file=sys.stderr)
         hist_file = None
         raise
 
@@ -169,7 +168,8 @@ def run_cli():
         s = bess.BESS()
         s.connect()
     except bess.BESS.APIError as e:
-        print >> stderr, e.message, '(bessd daemon is not running?)'
+        print('{} (bessd daemon is not running?)'.format(e),
+              file=sys.stderr)
 
     cli = TGENCLI(s, generator_commands, ferr=stderr, interactive=interactive,
                   history_file=hist_file)

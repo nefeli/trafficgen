@@ -36,7 +36,7 @@ class HttpMode(object):
         payload_prefix = 'GET /pub/WWW/TheProject.html HTTP/1.1\r\nHost: www.'
         payload = payload_prefix + 'aaa.com\r\n\r\n'
         pkt_headers = eth / ip / tcp
-        pkt_template = str(eth / ip / tcp / payload)
+        pkt_template = bytes(eth / ip / tcp / payload)
 
         num_cores = len(spec.tx_cores)
         flows_per_core = spec.num_flows / num_cores
