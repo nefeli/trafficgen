@@ -226,7 +226,7 @@ class Pipeline(object):
 class TrafficSpec(object):
 
     def __init__(self, pps=None, mbps=None,
-                 tx_cores=None, rx_cores=None, src_mac='02:1e:67:9f:4d:bb',
+                 tx_cores=None, rx_cores=None, src_mac=None,
                  dst_mac='02:1e:67:9f:4d:bb', src_ip='192.168.0.1',
                  dst_ip='10.0.0.1', tx_timestamp_offset=0,
                  rx_timestamp_offset=0,
