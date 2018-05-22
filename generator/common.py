@@ -158,21 +158,44 @@ class PriorityProducers(Producers):
 
 class Pipeline(object):
 
-    def __init__(self, internal_graph, periphery, producers=None):
-        self.__modules = set([x[0] for x in internal_graph.keys()])
-        self.add_modules([x[0] for x in internal_graph.values()])
-        for mgs in periphery.values():
-            self.add_modules([mg[0] for mg in mgs])
-        self.__internal_graph = internal_graph
-        self.__periphery = periphery
+    def __init__(self, internal_graph=None, periphery=None, producers=None):
+        if internal_graph is not None:
+            self.__internal_graph = internal_graph
+            self.__modules = set([x[0] for x in internal_graph.keys()])
+            self.add_modules([x[0] for x in internal_graph.values()])
+        else:
+            self.__modules = set()
+            self.__internal_graph = dict()
+
+        if periphery is not None:
+            for mgs in periphery.values():
+                self.add_modules([mg[0] for mg in mgs])
+            self.__periphery = periphery
+        else:
+            self.__periphery = dict()
+
         self.__producers = producers
         self.tc = None
         self.tx_q = None
         self.tx_rr = None
 
+    def add_module(self, module):
+        self.__modules.add(module)
+
     def add_modules(self, modules):
         for m in modules:
             self.__modules.add(m)
+
+    def add_edge(self, src, ogate, dst, igate):
+        self.__modules.add(src)
+        self.__modules.add(dst)
+        self.__internal_graph[(src, ogate)] = (dst, igate)
+
+    def add_peripheral_edge(self, ext_gate, dst, igate):
+        self.__modules.add(dst)
+        if ext_gate not in self.__internal_graph:
+            self.__periphery[ext_gate] = list()
+        self.__periphery[ext_gate].append((dst, igate))
 
     def modules(self):
         return self.__modules
@@ -191,6 +214,9 @@ class Pipeline(object):
 
     def producers(self):
         return self.__producers
+
+    def set_producers(self, producers):
+        self.__producers = producers
 
     def plumb(self):
         for src, dst in self.__internal_graph.items():

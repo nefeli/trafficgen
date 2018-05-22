@@ -547,7 +547,8 @@ def start(cli, port, mode, spec):
 
         for i, core in enumerate(tx_cores):
             cli.bess.add_worker(wid=core, core=core, scheduler='experimental')
-            tx_pipe = tmode.setup_tx_pipeline(cli, port, ts)
+            tx_pipe = Pipeline()
+            tmode.setup_tx_pipeline(cli, port, ts, tx_pipe)
 
             # These modules are required across all pipelines
             tx_pipe.tx_rr = RoundRobin(gates=[0])
@@ -601,7 +602,8 @@ def start(cli, port, mode, spec):
             if core not in tx_cores:
                 cli.bess.add_worker(wid=core, core=core,
                                     scheduler='experimental')
-            rx_pipe = tmode.setup_rx_pipeline(cli, port, ts)
+            rx_pipe = Pipeline()
+            tmode.setup_rx_pipeline(cli, port, ts, rx_pipe)
 
             queues = []
             if core in rx_qids and len(rx_qids[core]) > 1:
