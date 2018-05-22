@@ -46,7 +46,8 @@ class TestingMode(object):
                      tun_src_ip=None, tun_dst_ip=None,
                      min_src_ip=None, max_src_ip=None,
                      min_dst_ip=None, max_dst_ip=None,
-                     min_src_port=None, max_src_port=None, dummy_mac=None,
+                     min_src_port=None, max_src_port=None,
+                     dummy_mac=None, outer_macs=None,
                      min_dst_port=None, max_dst_port=None,
                      proto=None, quick_rampup=False, **kwargs):
             self.pkt_size = pkt_size
@@ -73,6 +74,10 @@ class TestingMode(object):
             self.min_dst_ip = min_dst_ip
             self.max_dst_ip = max_dst_ip
             self.dummy_mac = dummy_mac
+            if isinstance(outer_macs, str):
+                self.outer_macs = outer_macs.split(' ')
+            else:
+                self.outer_macs = outer_macs
             self.min_src_port = min_src_port
             self.max_src_port = max_src_port
             self.min_dst_port = min_dst_port
@@ -200,7 +205,15 @@ class TestingMode(object):
 
         pipeline.add_edge(setmd_fwd, 0, fwd_mac_lb, 0)
         pipeline.add_edge(setmd_rev, 0, rev_mac_lb, 0)
-        pipeline.add_peripheral_edge(0, ethencap, 0)
+
+        outer_mac_lb = HashLB(mode='l4')
+        outer_mac_lb.set_gates(gates=list(range(len(spec.outer_macs))))
+        pipeline.add_edge(ethencap, 0, outer_mac_lb, 0)
+        for i, mac in enumerate(spec.outer_macs):
+            mac64 = mac2int(mac)
+            update = Update(fields=[{'offset': 0, 'size': 6, 'value': mac64}])
+            pipeline.add_edge(outer_mac_lb, i, update, 0)
+            pipeline.add_peripheral_edge(0, update, 0)
 
         if spec.fwd_weight != spec.rev_weight:
             pipeline.set_producers(WeightedProducers(
