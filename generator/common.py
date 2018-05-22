@@ -54,6 +54,7 @@ def setup_mclasses(cli, globs):
         'IPChecksum',
         'Measure',
         'Merge',
+        'PortOut',
         'Queue',
         'QueueInc',
         'QueueOut',
@@ -273,9 +274,10 @@ class Session(object):
     docstring
     """
 
-    def __init__(self, port, spec, mode, tx_pipelines, rx_pipelines, bess, cli):
+    def __init__(self, port, port_out, spec, mode, tx_pipelines, rx_pipelines, bess, cli):
         now = time.time()
         self.__port = port
+        self.__port_out = port_out
         self.__spec = spec
         self.__mode = mode
         self.__curr_stats = None
@@ -315,6 +317,9 @@ class Session(object):
 
     def port(self):
         return self.__port
+
+    def port_out(self):
+        return self.__port_out
 
     def spec(self):
         return self.__spec
