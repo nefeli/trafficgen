@@ -36,7 +36,7 @@ class FlowGenMode(object):
             return self.__str__()
 
     @staticmethod
-    def setup_tx_pipeline(cli, port, spec):
+    def setup_tx_pipeline(cli, port, spec, pipeline):
         setup_mclasses(cli, globals())
         eth = scapy.Ether(src=spec.src_mac, dst=spec.dst_mac)
         ip = scapy.IP(src=spec.src_ip, dst=spec.dst_ip)
@@ -61,16 +61,11 @@ class FlowGenMode(object):
                       flow_duration=spec.flow_duration, arrival=spec.arrival,
                       duration=spec.duration, quick_rampup=True)
         cksum = IPChecksum()
-        graph = {
-            (src, 0): (cksum, 0),
-        }
-        periphery = {0: [(cksum, 0)]}
-        return Pipeline(graph, periphery, RoundRobinProducers([src]))
+        pipeline.add_edge(src, 0, cksum, 0)
+        pipeline.add_peripheral_edge(0, cksum, 0)
+        pipeline.set_producers(RoundRobinProducers([src]))
 
     @staticmethod
-    def setup_rx_pipeline(cli, port, spec):
+    def setup_rx_pipeline(cli, port, spec, pipeline):
         setup_mclasses(cli, globals())
-        sink = Sink()
-        graph = dict()
-        periphery = {0: [(sink, 0)]}
-        return Pipeline(graph, periphery)
+        pipeline.add_peripheral_edge(0, Sink(), 0)
