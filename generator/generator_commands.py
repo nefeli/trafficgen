@@ -573,7 +573,8 @@ def _start(cli, port, mode, tmode, ts):
         for i, core in enumerate(ts.tx_cores):
             s = copy.copy(ts)
             if 'testing' in mode:
-                s.flow_rate /= len(ts.tx_cores)
+                for tenant in s.tenants:
+                    tenant.flow_rate /= len(ts.tx_cores)
                 s.core = core
             cli.bess.add_worker(wid=core, core=core, scheduler='experimental')
             tx_pipe = Pipeline()
@@ -803,68 +804,3 @@ def set_rate(cli, port, rate):
         print('port "{}" is not running'.format(port))
         return
     sess.set_rate(*parse_rate_str(rate))
-
-
-# XXX: EVIL EVIL EVIL
-@cmd('set flows PORT NUMBER', 'Set the number of flows')
-def set_flows(cli, port, flows):
-    def atoh(ip):
-        return struct.unpack("!L", socket.inet_aton(ip))[0]
-
-    sess = cli.get_session(port)
-    if sess is None:
-        print('port "{}" is not running'.format(port))
-        return
-    if sess.mode() not in ('testing', 'udp'):
-        print('not supported')
-        return
-    num_cores = len(sess.tx_pipelines())
-    flows_per_core = int(flows) / num_cores
-
-    spec = sess.spec()
-    dst_ip = atoh(spec.dst_ip)
-    dst_ip_offset = 30
-    if spec.vlan:
-        dst_ip_offset += 4
-
-    with sess.cli().bess_lock:
-        sess._pause()
-        for core, pipe in sess.tx_pipelines().items():
-            for m in pipe.modules():
-                if 'rupdate' not in m.name:
-                    continue
-                m.clear()
-                m.add(fields=[{'offset': dst_ip_offset,
-                               'size': 4,
-                               'min': dst_ip,
-                               'max': dst_ip + flows_per_core - 1}])
-        sess._resume()
-
-
-# XXX: EVIL EVIL EVIL
-@cmd('set flow_rate PORT NUMBER RATE', 'Set the flow arrival rate')
-def set_flow_rate(cli, port, flow_rate, pps_per_flow):
-    sess = cli.get_session(port)
-    if sess is None:
-        print('port "{}" is not running'.format(port))
-        return
-    if sess.mode() not in ('testing'):
-        print('not supported')
-        return
-
-    spec = copy.copy(sess.spec())
-    spec.flow_rate = flow_rate
-    spec.pps_per_flow = parse_rate_str(pps_per_flow)[0]
-    spec.flow_rate /= len(sess.tx_pipelines())
-
-    with sess.cli().bess_lock:
-        sess._pause()
-        for core, pipe in sess.tx_pipelines().items():
-            spec.core = core
-            args = modes.TestingMode.make_args(spec)
-            for m in pipe.modules():
-                if 'flowgen_fwd' in m.name:
-                    m.update(**args['fwd'])
-                if 'flowgen_rev' in m.name:
-                    m.update(**args['rev'])
-        sess._resume()

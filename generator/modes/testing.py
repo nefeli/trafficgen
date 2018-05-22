@@ -36,13 +36,11 @@ def _build_pkt(spec, size, reverse=False):
 class TestingMode(object):
     name = 'testing'
 
-    class Spec(TrafficSpec):
-
+    class Tenant(object):
         def __init__(self, pkt_size=60,
                      fwd_pid=None, rev_pid=None, fwd_weight=1, rev_weight=1,
                      flow_duration=10, flow_rate=100, pps_per_flow=1000,
-                     core=None, fwd_dst_macs=None, rev_dst_macs=None,
-                     rx_timestamp_offset=0, tx_timestamp_offset=0,
+                     fwd_dst_macs=None, rev_dst_macs=None,
                      tun_src_ip=None, tun_dst_ip=None,
                      min_src_ip=None, max_src_ip=None,
                      min_dst_ip=None, max_dst_ip=None,
@@ -58,7 +56,6 @@ class TestingMode(object):
             self.rev_weight = rev_weight
             self.flow_duration = flow_duration
             self.pps_per_flow = pps_per_flow
-            self.core = core
             if isinstance(fwd_dst_macs, str):
                 self.fwd_dst_macs = fwd_dst_macs.split(' ')
             else:
@@ -85,47 +82,32 @@ class TestingMode(object):
             self.proto = proto
             self.quick_rampup = quick_rampup
 
+    class Spec(TrafficSpec):
+
+        def __init__(self, tenants=None, core=None, 
+                     rx_timestamp_offset=0, tx_timestamp_offset=0, **kwargs):
+            self.core = core
+            self.tenants = list()
+            for tenant in tenants:
+                self.tenants.append(TestingMode.Tenant(**tenant))
+
             if not rx_timestamp_offset:
                 rx_timestamp_offset = 106
             if not tx_timestamp_offset:
                 tx_timestamp_offset = 106
-            super(
-                TestingMode.Spec, self).__init__(rx_timestamp_offset=rx_timestamp_offset,
-                                                 tx_timestamp_offset=tx_timestamp_offset,
-                                                 **kwargs)
+
+            super(TestingMode.Spec, self).__init__(
+                    rx_timestamp_offset=rx_timestamp_offset,
+                    tx_timestamp_offset=tx_timestamp_offset,
+                    **kwargs)
 
         def __str__(self):
-            s = super(TestingMode.Spec, self).__str__() + '\n'
-            attrs = [
-                ('pkt_size', lambda x: str(x)),
-                ('fwd_pid', lambda x: str(x)),
-                ('rev_pid', lambda x: str(x)),
-                ('fwd_weight', lambda x: str(x)),
-                ('rev_weight', lambda x: str(x)),
-                ('flow_duration', lambda x: str(x)),
-                ('flow_rate', lambda x: str(x)),
-                ('pps_per_flow', lambda x: str(x)),
-                ('fwd_dst_macs', lambda x: str(x)),
-                ('rev_dst_macs', lambda x: str(x)),
-                ('tun_src_ip', lambda x: str(x)),
-                ('tun_dst_ip', lambda x: str(x)),
-                ('min_src_ip', lambda x: str(x)),
-                ('max_src_ip', lambda x: str(x)),
-                ('min_dst_ip', lambda x: str(x)),
-                ('max_dst_ip', lambda x: str(x)),
-                ('min_src_port', lambda x: str(x)),
-                ('max_src_port', lambda x: str(x)),
-                ('min_dst_port', lambda x: str(x)),
-                ('max_dst_port', lambda x: str(x)),
-                ('proto', lambda x: str(x)),
-            ]
-            return s + self._attrs_to_str(attrs, 25)
+            return super(TestingMode.Spec, self).__str__() + '\n'
 
         def __repr__(self):
             return self.__str__()
 
-    @staticmethod
-    def setup_tx_pipeline(cli, port, spec, pipeline):
+    def setup_tenant_tx(cli, core, src_mac, spec, pipeline):
         setup_mclasses(cli, globals())
 
         fwd_pkt_template = _build_pkt(spec, spec.pkt_size)
@@ -144,13 +126,13 @@ class TestingMode(object):
         if len(spec.rev_dst_macs) == 0:
             spec.rev_dst_macs = [spec.rev_dst_mac]
 
-        src_mac64 = mac2int(spec.src_mac)
+        src_mac64 = mac2int(src_mac)
         fwd_dst_mac64 = mac2int(spec.fwd_dst_macs[0])
         rev_dst_mac64 = mac2int(spec.rev_dst_macs[0])
 
         # Setup forward traffic
         src_fwd = FlowGen(
-            name='flowgen_fwd_c{}'.format(spec.core), **args['fwd'])
+            name='flowgen_fwd_c{}_p{}'.format(core, spec.fwd_pid), **args['fwd'])
         cksum_fwd = IPChecksum()
         setmd_fwd = SetMetadata(
             attrs=[
@@ -168,7 +150,7 @@ class TestingMode(object):
 
         # Setup reverse traffic
         src_rev = FlowGen(
-            name='flowgen_rev_c{}'.format(spec.core), **args['rev'])
+            name='flowgen_rev_c{}_p{}'.format(core, spec.rev_pid), **args['rev'])
         cksum_rev = IPChecksum()
         setmd_rev = SetMetadata(
             attrs=[
@@ -215,14 +197,20 @@ class TestingMode(object):
             pipeline.add_edge(outer_mac_lb, i, update, 0)
             pipeline.add_peripheral_edge(0, update, 0)
 
-        if spec.fwd_weight != spec.rev_weight:
-            pipeline.set_producers(WeightedProducers(
-                {spec.fwd_weight: src_fwd, spec.rev_weight: src_rev}, 'packet'))
-        else:
-            pipeline.set_producers(RoundRobinProducers([src_fwd, src_rev]))
+        return src_fwd, src_rev
 
     @staticmethod
-    def setup_rx_pipeline(cli, port, spec, pipeline, port_out):
+    def setup_tx_pipeline(cli, port, spec, pipeline):
+        setup_mclasses(cli, globals())
+
+        producers = list()
+        for tenant in spec.tenants:
+            fwd_prod, rev_prod = TestingMode.setup_tenant_tx(cli, spec.core, spec.src_mac, tenant, pipeline)
+            producers.extend([fwd_prod, rev_prod])
+
+        pipeline.set_producers(RoundRobinProducers(producers))
+
+    def setup_tenant_rx(cli, core, src_mac, spec, pipeline, port_out):
         setup_mclasses(cli, globals())
 
         fwd_arp_blast = ArpBlast(sha=spec.dummy_mac)
@@ -233,7 +221,7 @@ class TestingMode(object):
         ipencap = IPEncap()
         ethencap = EtherEncap()
 
-        src_mac64 = mac2int(spec.src_mac)
+        src_mac64 = mac2int(src_mac)
         fwd_dst_mac64 = mac2int(spec.fwd_dst_macs[0])
         rev_dst_mac64 = mac2int(spec.rev_dst_macs[0])
 
@@ -285,6 +273,13 @@ class TestingMode(object):
         pipeline.add_edge(ethencap, 0, port_out, 0)
 
         pipeline.add_peripheral_edge(0, vpop, 0)
+
+    @staticmethod
+    def setup_rx_pipeline(cli, port, spec, pipeline, port_out):
+        setup_mclasses(cli, globals())
+
+        for tenant in spec.tenants:
+            TestingMode.setup_tenant_rx(cli, spec.core, spec.src_mac, tenant, pipeline, port_out)
 
     @staticmethod
     def make_args(spec):
