@@ -6,11 +6,13 @@ import fcntl
 import fnmatch
 import glob
 import inspect
+import json
 import multiprocessing
 import os
 import os.path
 import pprint
 import re
+from ruamel.yaml import YAML
 import scapy.all as scapy
 import signal
 import socket
@@ -30,6 +32,32 @@ available_cores = list(range(multiprocessing.cpu_count()))
 
 DEFAULT_STATS_CSV = '/tmp/bench.csv'
 stats_csv = DEFAULT_STATS_CSV
+
+
+def load_json_config(conf_path):
+    with open(conf_path, 'r') as f:
+        return json.load(f.read())
+
+
+def load_yaml_config(conf_path):
+    yaml = YAML(typ='safe')
+    with open(conf_path, 'r') as f:
+        return yaml.load(f.read())
+
+
+def load_config(conf_path):
+    # Try to guess config format from file name
+    _, ext = os.path.splitext(conf_path)
+    if ext.lower() == 'json':
+        return load_json_config(conf_path)
+    if ext.lower() in ('yaml', 'yml'):
+        return load_yaml_config(conf_path)
+
+    # Fall back onto json by default, then yaml
+    try:
+        return load_json_config(conf_path)
+    except:
+        return load_yaml_config(conf_path)
 
 
 def get_var_attrs(cli, var_token, partial_word):
@@ -69,6 +97,11 @@ def get_var_attrs(cli, var_token, partial_word):
         elif var_token == 'CSV':
             var_type = 'filename'
             var_desc = 'a path to a csv file'
+
+        elif var_token == 'CONF_FILE':
+            var_type = 'filename'
+            var_desc = 'configuration filename'
+            var_candidates = bess_commands.complete_filename(partial_word)
 
     except socket.error as e:
         if e.errno in [errno.ECONNRESET, errno.EPIPE]:
@@ -590,10 +623,17 @@ def _start(cli, port, mode, tmode, ts):
     cli.add_session(sess)
 
 
+def pick_core():
+    global available_cores
+    if len(available_cores) > 0:
+        return [available_cores.pop(0)]
+    else:
+        raise cli.InternalError('No available cores.')
+
+
 @cmd('start PORT MODE [TRAFFIC_SPEC...]', 'Start sending packets on a port')
 def start(cli, port, mode, spec):
     setup_mclasses(cli, globals())
-    global available_cores
     if not isinstance(port, str):
         raise cli.CommandError('Port identifier must be a string')
 
@@ -606,23 +646,17 @@ def start(cli, port, mode, spec):
         if 'tx_cores' in spec:
             tx_cores = list(map(int, spec.pop('tx_cores').split(' ')))
         else:
-            if len(available_cores) > 0:
-                tx_cores = [available_cores.pop(0)]
-            else:
-                raise cli.InternalError('No available cores.')
+            tx_cores = pick_core()
 
         if 'rx_cores' in spec:
             rx_cores = list(map(int, spec.pop('rx_cores').split(' ')))
         elif 'rx_cores' not in spec and 'tx_cores' not in spec:
             rx_cores = tx_cores
         else:
-            if len(available_cores) > 0:
-                rx_cores = [available_cores.pop(0)]
-            else:
-                raise cli.InternalError('No available cores.')
+            rx_cores = pick_core()
     else:
         if len(available_cores) > 0:
-            tx_cores = [available_cores.pop(0)]
+            tx_cores = pick_core()
             rx_cores = tx_cores
         else:
             raise cli.InternalError('No available cores.')
@@ -642,6 +676,31 @@ def start(cli, port, mode, spec):
         ts = tmode.Spec(tx_cores=tx_cores, rx_cores=rx_cores, **spec)
     else:
         ts = tmode.Spec(tx_cores=tx_cores, rx_cores=rx_cores)
+
+    _start(cli, port, mode, tmode, ts)
+
+
+@cmd('start_file PORT MODE CONF_FILE', 'Start sending packets on a port')
+def start_file(cli, port, mode, conf_file):
+    conf = load_config(conf_file)
+
+    # Find traffic mode
+    tmode = None
+    for x in generator.modes.__dict__:
+        m = generator.modes.__dict__[x]
+        if getattr(m, 'name', '') == mode:
+            tmode = m
+
+    if tmode is None:
+        raise cli.CommandError("Mode %s is invalid" % (mode,))
+
+    if 'tx_cores' not in conf:
+        conf['tx_cores'] = pick_core()
+
+    if 'rx_cores' not in conf:
+        conf['rx_cores'] = pick_core()
+
+    ts = tmode.Spec(**conf)
 
     _start(cli, port, mode, tmode, ts)
 
