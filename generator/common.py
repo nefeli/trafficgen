@@ -193,7 +193,7 @@ class Pipeline(object):
 
     def add_peripheral_edge(self, ext_gate, dst, igate):
         self.__modules.add(dst)
-        if ext_gate not in self.__internal_graph:
+        if ext_gate not in self.__periphery:
             self.__periphery[ext_gate] = list()
         self.__periphery[ext_gate].append((dst, igate))
 
