@@ -653,20 +653,23 @@ def _stop(cli, port):
         cli.bess.pause_all()
         try:
             workers = set()
+            del_modules = set([sess.port_out().name])
             for core, pipe in sess.tx_pipelines().items():
                 for m in pipe.modules():
-                    cli.bess.destroy_module(m.name)
+                    del_modules.add(m.name)
                 workers.add(core)
 
             for core, pipe in sess.rx_pipelines().items():
                 for m in pipe.modules():
-                    cli.bess.destroy_module(m.name)
+                    del_modules.add(m.name)
                 workers.add(core)
+
+            for m in del_modules:
+                cli.bess.destroy_module(m)
 
             for worker in workers:
                 cli.bess.destroy_worker(worker)
 
-            cli.bess.destroy_module(sess.port_out().name)
             cli.bess.destroy_port(sess.port())
         finally:
             cli.bess.resume_all()
