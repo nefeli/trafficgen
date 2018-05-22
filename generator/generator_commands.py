@@ -464,46 +464,12 @@ def _create_port_args(cli, port_id, num_rx_cores, num_tx_cores):
     return args
 
 
-@cmd('start PORT MODE [TRAFFIC_SPEC...]', 'Start sending packets on a port')
-def start(cli, port, mode, spec):
+def _start(cli, port, mode, tmode, ts):
     setup_mclasses(cli, globals())
-    global available_cores
-    if not isinstance(port, str):
-        raise cli.CommandError('Port identifier must be a string')
-
-    if cli.port_is_running(port):
-        bess_commands.warn(cli, 'Port %s is already running.' % (port,),
-                           _stop, port)
-
-    # Allocate cores if necessary
-    if spec is not None:
-        if 'tx_cores' in spec:
-            tx_cores = list(map(int, spec.pop('tx_cores').split(' ')))
-        else:
-            if len(available_cores) > 0:
-                tx_cores = [available_cores.pop(0)]
-            else:
-                raise cli.InternalError('No available cores.')
-
-        if 'rx_cores' in spec:
-            rx_cores = list(map(int, spec.pop('rx_cores').split(' ')))
-        elif 'rx_cores' not in spec and 'tx_cores' not in spec:
-            rx_cores = tx_cores
-        else:
-            if len(available_cores) > 0:
-                rx_cores = [available_cores.pop(0)]
-            else:
-                raise cli.InternalError('No available cores.')
-    else:
-        if len(available_cores) > 0:
-            tx_cores = [available_cores.pop(0)]
-            rx_cores = tx_cores
-        else:
-            raise cli.InternalError('No available cores.')
 
     # Create the port
-    num_tx_cores = len(tx_cores)
-    num_rx_cores = len(rx_cores)
+    num_tx_cores = len(ts.tx_cores)
+    num_rx_cores = len(ts.rx_cores)
     num_cores = num_tx_cores + num_rx_cores
     port_args = _create_port_args(cli, port, num_tx_cores, num_rx_cores)
     with cli.bess_lock:
@@ -511,30 +477,13 @@ def start(cli, port, mode, spec):
                                    arg=port_args['arg'])
         port = ret.name
 
-    if spec is not None and 'src_mac' not in spec:
-        spec['src_mac'] = ret.mac_addr
+    if ts.src_mac is None:
+        ts.src_mac = ret.mac_addr
 
-    # Find traffic mode
-    tmode = None
-    for x in generator.modes.__dict__:
-        m = generator.modes.__dict__[x]
-        if getattr(m, 'name', '') == mode:
-            tmode = m
-
-    if tmode is None:
-        raise cli.CommandError("Mode %s is invalid" % (mode,))
-
-    if spec is None or spec['src_mac'] == ret.mac_addr:
+    if ts.src_mac == ret.mac_addr:
         cli.fout.write('NOTE: Port %s may filter out returned packets whose '
                        'source is still the same as its own MAC address %s\n'
                        % (port, ret.mac_addr))
-
-    # Initialize the pipelines
-    if spec is not None:
-        ts = tmode.Spec(tx_cores=tx_cores, rx_cores=rx_cores, **spec)
-    else:
-        ts = tmode.Spec(src_mac=ret.mac_addr, tx_cores=tx_cores,
-                        rx_cores=rx_cores)
 
     tx_pipes = dict()
     rx_pipes = dict()
@@ -545,7 +494,7 @@ def start(cli, port, mode, spec):
         # Setup TX pipelines
         port_out = PortOut(port=port)
 
-        for i, core in enumerate(tx_cores):
+        for i, core in enumerate(ts.tx_cores):
             cli.bess.add_worker(wid=core, core=core, scheduler='experimental')
             tx_pipe = Pipeline()
             tmode.setup_tx_pipeline(cli, port, ts, tx_pipe)
@@ -590,16 +539,16 @@ def start(cli, port, mode, spec):
         # Setup RX pipelines
         rx_qids = dict()
         if num_rx_cores < num_tx_cores:
-            for i, core in enumerate(rx_cores):
+            for i, core in enumerate(ts.rx_cores):
                 rx_qids[core] = [i]
 
             # round-robin remaining queues across rx_cores
-            for i in range(len(tx_cores[num_rx_cores:])):
-                core = rx_cores[(num_rx_cores + i) % num_rx_cores]
+            for i in range(len(ts.tx_cores[num_rx_cores:])):
+                core = ts.rx_cores[(num_rx_cores + i) % num_rx_cores]
                 rx_qids[core].append(num_rx_cores + i)
 
-        for i, core in enumerate(rx_cores):
-            if core not in tx_cores:
+        for i, core in enumerate(ts.rx_cores):
+            if core not in ts.tx_cores:
                 cli.bess.add_worker(wid=core, core=core,
                                     scheduler='experimental')
             rx_pipe = Pipeline()
@@ -639,6 +588,62 @@ def start(cli, port, mode, spec):
     sess = Session(port, port_out, ts, mode, tx_pipes, rx_pipes, cli.bess, cli)
     sess.start_monitor()
     cli.add_session(sess)
+
+
+@cmd('start PORT MODE [TRAFFIC_SPEC...]', 'Start sending packets on a port')
+def start(cli, port, mode, spec):
+    setup_mclasses(cli, globals())
+    global available_cores
+    if not isinstance(port, str):
+        raise cli.CommandError('Port identifier must be a string')
+
+    if cli.port_is_running(port):
+        bess_commands.warn(cli, 'Port %s is already running.' % (port,),
+                           _stop, port)
+
+    # Allocate cores if necessary
+    if spec is not None:
+        if 'tx_cores' in spec:
+            tx_cores = list(map(int, spec.pop('tx_cores').split(' ')))
+        else:
+            if len(available_cores) > 0:
+                tx_cores = [available_cores.pop(0)]
+            else:
+                raise cli.InternalError('No available cores.')
+
+        if 'rx_cores' in spec:
+            rx_cores = list(map(int, spec.pop('rx_cores').split(' ')))
+        elif 'rx_cores' not in spec and 'tx_cores' not in spec:
+            rx_cores = tx_cores
+        else:
+            if len(available_cores) > 0:
+                rx_cores = [available_cores.pop(0)]
+            else:
+                raise cli.InternalError('No available cores.')
+    else:
+        if len(available_cores) > 0:
+            tx_cores = [available_cores.pop(0)]
+            rx_cores = tx_cores
+        else:
+            raise cli.InternalError('No available cores.')
+
+    # Find traffic mode
+    tmode = None
+    for x in generator.modes.__dict__:
+        m = generator.modes.__dict__[x]
+        if getattr(m, 'name', '') == mode:
+            tmode = m
+
+    if tmode is None:
+        raise cli.CommandError("Mode %s is invalid" % (mode,))
+
+    # Initialize the pipelines
+    if spec is not None:
+        ts = tmode.Spec(tx_cores=tx_cores, rx_cores=rx_cores, **spec)
+    else:
+        ts = tmode.Spec(tx_cores=tx_cores, rx_cores=rx_cores)
+
+    _start(cli, port, mode, tmode, ts)
 
 
 def _stop(cli, port):
