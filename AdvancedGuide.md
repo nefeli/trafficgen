@@ -11,7 +11,6 @@ start PORT MODE [OPTIONS...]
 You can generate three types of traffic
 + `udp`: Simple stream(s) of UDP packets
 + `flowgen`: More realistic, flow-based traffic
-+ `http`: Like `flowgen` but with HTTP payloads
 
 ## Quick Start
 
@@ -142,12 +141,3 @@ Option | Description
 `flow_rate` | Setting `flow_rate=R` will result in trafficgen generating `R` new flows per second. By default `flow_rate` is set to `num_flows` / `flow_duration`.
 `arrival` | Setting `arrival` will change the distribution from which trafficgen generates flow IDs (5-tuples). It can be either `pareto` or `uniform`. By default `arrival` is set to `uniform`.
 |`duration` | Setting `duration` will change the distribution from which trafficgen chooses flow lifetimes. It can be either `pareto` or `uniform`. By default `duration` is set to `uniform`.|
-
-### HTTP Options
-
-The following options are only applicable to ports sending in `http` mode.
-
-Option | Description
------- | -----------
-`num_flows` | Setting `num_flows=N` will result in trafficgen sending `N` flows. By default `num_flows` is set to `4000`.
-`src_port` | Setting `src_port=X` will result in trafficgen generating HTTP traffic with TCP source ports starting with `X`. By default `src_port` is set to `1001`.
