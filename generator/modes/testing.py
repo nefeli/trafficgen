@@ -215,8 +215,6 @@ class TestingMode(object):
 
         fwd_arp_blast = ArpBlast(sha=spec.dummy_mac)
         rev_arp_blast = ArpBlast(sha=spec.dummy_mac)
-        vpop = VLANPop()
-        vxdecap = VXLANDecap()
         vxencap = VXLANEncap()
         ipencap = IPEncap()
         ethencap = EtherEncap()
@@ -248,23 +246,8 @@ class TestingMode(object):
                                         6, 'value_int': src_mac64},
                                     {'name': 'ether_dst', 'size': 6, 'value_int': rev_dst_mac64}])
 
-        em = ExactMatch(fields=[{'attr_name':'tun_id', 'num_bytes':4}])
-        em.set_default_gate(gate=0)
-        # XXX: this call to htonl() shouldn't be necessary. fix VXLANDecap or ExactMatch
-        em.add(fields=[{'value_int': socket.htonl(spec.fwd_pid)}], gate=1)
-        em.add(fields=[{'value_int': socket.htonl(spec.rev_pid)}], gate=2)
-
         pipeline.add_edge(setmd_fwd, 0, vxencap, 0)
         pipeline.add_edge(setmd_rev, 0, vxencap, 0)
-
-        pipeline.add_edge(vpop, 0, vxdecap, 0)
-
-        sink = Sink()
-
-        pipeline.add_edge(vxdecap, 0, em, 0)
-        pipeline.add_edge(em, 0, sink, 0)
-        pipeline.add_edge(em, 1, fwd_arp_blast, 0)
-        pipeline.add_edge(em, 2, rev_arp_blast, 0)
 
         pipeline.add_edge(fwd_arp_blast, 0, setmd_fwd, 0)
         pipeline.add_edge(rev_arp_blast, 0, setmd_rev, 0)
@@ -272,14 +255,36 @@ class TestingMode(object):
         pipeline.add_edge(ipencap, 0, ethencap, 0)
         pipeline.add_edge(ethencap, 0, port_out, 0)
 
-        pipeline.add_peripheral_edge(0, vpop, 0)
+        return (fwd_arp_blast, rev_arp_blast)
 
     @staticmethod
     def setup_rx_pipeline(cli, port, spec, pipeline, port_out):
         setup_mclasses(cli, globals())
 
+        vpop = VLANPop()
+        vxdecap = VXLANDecap()
+        pipeline.add_edge(vpop, 0, vxdecap, 0)
+        pipeline.add_peripheral_edge(0, vpop, 0)
+
+        sink = Sink()
+        em = ExactMatch(fields=[{'attr_name':'tun_id', 'num_bytes':4}])
+        em.set_default_gate(gate=0)
+        pipeline.add_edge(em, 0, sink, 0)
+        pipeline.add_edge(vxdecap, 0, em, 0)
+
+
+        # XXX: the calls to htonl() below shouldn't be necessary. fix VXLANDecap
+        # or ExactMatch
+        gate = 1
         for tenant in spec.tenants:
-            TestingMode.setup_tenant_rx(cli, spec.core, spec.src_mac, tenant, pipeline, port_out)
+            farp, rarp = TestingMode.setup_tenant_rx(cli, spec.core, spec.src_mac, tenant, pipeline, port_out)
+            em.add(fields=[{'value_int': socket.htonl(tenant.fwd_pid)}],
+                   gate=gate + 1)
+            pipeline.add_edge(em, gate + 1, farp, 0)
+            em.add(fields=[{'value_int': socket.htonl(tenant.rev_pid)}],
+                   gate=gate + 2)
+            pipeline.add_edge(em, gate + 2, rarp, 0)
+            gate += 2
 
     @staticmethod
     def make_args(spec):
