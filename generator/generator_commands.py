@@ -683,6 +683,10 @@ def start(cli, port, mode, spec):
 @cmd('start_file PORT MODE CONF_FILE', 'Start sending packets on a port')
 def start_file(cli, port, mode, conf_file):
     conf = load_config(conf_file)
+    includes = conf.pop('includes', None)
+    if isinstance(includes, list):
+        for include in includes:
+            conf = {**conf, **load_config(include)}
 
     # Find traffic mode
     tmode = None
