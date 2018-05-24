@@ -220,8 +220,8 @@ class TestingMode(object):
         ethencap = EtherEncap()
 
         src_mac64 = mac2int(src_mac)
-        fwd_dst_mac64 = mac2int(spec.fwd_dst_macs[0])
-        rev_dst_mac64 = mac2int(spec.rev_dst_macs[0])
+        fwd_dst_mac64 = mac2int(spec.outer_macs[0])
+        rev_dst_mac64 = mac2int(spec.outer_macs[0])
 
         setmd_fwd = SetMetadata(
             attrs=[
@@ -232,8 +232,7 @@ class TestingMode(object):
                                     {'name': 'tun_id', 'size': 4,
                                         'value_int': spec.fwd_pid},
                                     {'name': 'ether_src', 'size':
-                                        6, 'value_int': src_mac64},
-                                    {'name': 'ether_dst', 'size': 6, 'value_int': fwd_dst_mac64}])
+                                        6, 'value_int': src_mac64}])
         setmd_rev = SetMetadata(
             attrs=[
                 {'name': 'tun_ip_src', 'size': 4,
@@ -243,8 +242,7 @@ class TestingMode(object):
                                     {'name': 'tun_id', 'size': 4,
                                         'value_int': spec.rev_pid},
                                     {'name': 'ether_src', 'size':
-                                        6, 'value_int': src_mac64},
-                                    {'name': 'ether_dst', 'size': 6, 'value_int': rev_dst_mac64}])
+                                        6, 'value_int': src_mac64}])
 
         pipeline.add_edge(setmd_fwd, 0, vxencap, 0)
         pipeline.add_edge(setmd_rev, 0, vxencap, 0)
@@ -262,8 +260,10 @@ class TestingMode(object):
         setup_mclasses(cli, globals())
 
         vpop = VLANPop()
+        get_sender = SetMetadata(attrs=[{'name': 'ether_dst', 'size': 6, 'offset': 6}])
         vxdecap = VXLANDecap()
-        pipeline.add_edge(vpop, 0, vxdecap, 0)
+        pipeline.add_edge(vpop, 0, get_sender, 0)
+        pipeline.add_edge(get_sender, 0, vxdecap, 0)
         pipeline.add_peripheral_edge(0, vpop, 0)
 
         sink = Sink()
