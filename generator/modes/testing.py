@@ -114,12 +114,19 @@ class TestingMode(object):
             client = etcd3.client(host=host, port=port)
             return client
 
+        def get_or_watch(client, key):
+            ret = client.get(key)
+            if ret:
+                return ret.value
+            return client.watch_once(fwd_dst_key).value
+
+
         client = get_etcd_handle(spec.etcd_host)
         dsts_key = '/pangolin/v1/vxlan/instantiate/vnis/{}'
         fwd_dst_key = dsts_key.format(spec.fwd_pid)
         rev_dst_key = dsts_key.format(spec.rev_pid)
-        fwd_dsts = client.watch_once(fwd_dst_key).value
-        rev_dsts = client.watch_once(rev_dst_key).value
+        fwd_dsts = get_or_watch(client, fwd_dst_key)
+        rev_dsts = get_or_watch(client, rev_dst_key)
         macs = [dst['mac'] for dst in fwd_dsts['destinations']]
         macs.extend([dst['mac'] for dst in rev_dsts['destinations']])
 
