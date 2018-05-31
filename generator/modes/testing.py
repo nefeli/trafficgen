@@ -109,7 +109,7 @@ class TestingMode(object):
 
     def setup_tenant_tx(cli, core, src_mac, spec, pipeline):
         @retry
-        def get_etcd_handle(etcd_host)
+        def get_etcd_handle(etcd_host):
             host, port = etcd_host.split(':')
             client = etcd3.client(host=host, port=port)
             return client
