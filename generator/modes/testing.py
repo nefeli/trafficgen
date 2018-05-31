@@ -81,6 +81,7 @@ class TestingMode(object):
             self.proto = proto
             self.quick_rampup = quick_rampup
             self.etcd_host = etcd_host
+            self.macs = None
 
     class Spec(TrafficSpec):
 
@@ -128,8 +129,8 @@ class TestingMode(object):
         rev_dst_key = dsts_key.format(spec.rev_pid)
         fwd_dsts = json.loads(get_or_watch(client, fwd_dst_key))
         rev_dsts = json.loads(get_or_watch(client, rev_dst_key))
-        macs = [dst['mac'] for dst in fwd_dsts['destinations']]
-        macs.extend([dst['mac'] for dst in rev_dsts['destinations']])
+        spec.macs = [dst['mac'] for dst in fwd_dsts['destinations']]
+        spec.macs.extend([dst['mac'] for dst in rev_dsts['destinations']])
 
         setup_mclasses(cli, globals())
 
@@ -212,9 +213,9 @@ class TestingMode(object):
         pipeline.add_edge(setmd_rev, 0, rev_mac_lb, 0)
 
         outer_mac_lb = HashLB(mode='l4')
-        outer_mac_lb.set_gates(gates=list(range(len(macs))))
+        outer_mac_lb.set_gates(gates=list(range(len(spec.macs))))
         pipeline.add_edge(ethencap, 0, outer_mac_lb, 0)
-        for i, mac in enumerate(macs):
+        for i, mac in enumerate(spec.macs):
             mac64 = mac2int(mac)
             update = Update(fields=[{'offset': 0, 'size': 6, 'value': mac64}])
             pipeline.add_edge(outer_mac_lb, i, update, 0)
@@ -236,6 +237,28 @@ class TestingMode(object):
     def setup_tenant_rx(cli, core, src_mac, spec, pipeline, port_out):
         setup_mclasses(cli, globals())
 
+        @retry
+        def get_etcd_handle(etcd_host):
+            host, port = etcd_host.split(':')
+            client = etcd3.client(host=host, port=port)
+            return client
+
+        def get_or_watch(client, key):
+            ret = client.get(key)
+            if ret:
+                return ret[0]
+            return client.watch_once(fwd_dst_key).value
+
+
+        client = get_etcd_handle(spec.etcd_host)
+        dsts_key = '/pangolin/v1/vxlan/instantiate/vnis/{}'
+        fwd_dst_key = dsts_key.format(spec.fwd_pid)
+        rev_dst_key = dsts_key.format(spec.rev_pid)
+        fwd_dsts = json.loads(get_or_watch(client, fwd_dst_key))
+        rev_dsts = json.loads(get_or_watch(client, rev_dst_key))
+        spec.macs = [dst['mac'] for dst in fwd_dsts['destinations']]
+        spec.macs.extend([dst['mac'] for dst in rev_dsts['destinations']])
+
         fwd_arp_blast = ArpBlast(sha=spec.dummy_mac)
         rev_arp_blast = ArpBlast(sha=spec.dummy_mac)
         vxencap = VXLANEncap()
@@ -243,8 +266,8 @@ class TestingMode(object):
         ethencap = EtherEncap()
 
         src_mac64 = mac2int(src_mac)
-        fwd_dst_mac64 = mac2int(spec.outer_macs[0])
-        rev_dst_mac64 = mac2int(spec.outer_macs[0])
+        fwd_dst_mac64 = mac2int(spec.macs[0])
+        rev_dst_mac64 = mac2int(spec.macs[0])
 
         setmd_fwd = SetMetadata(
             attrs=[
