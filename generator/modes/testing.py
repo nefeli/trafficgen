@@ -1,4 +1,6 @@
+import etcd3
 from functools import reduce
+from retrying import retry
 import scapy.all as scapy
 import socket
 import struct
@@ -45,9 +47,9 @@ class TestingMode(object):
                      min_src_ip=None, max_src_ip=None,
                      min_dst_ip=None, max_dst_ip=None,
                      min_src_port=None, max_src_port=None,
-                     dummy_mac=None, outer_macs=None,
+                     dummy_mac=None,
                      min_dst_port=None, max_dst_port=None,
-                     proto=None, quick_rampup=False, **kwargs):
+                     proto=None, quick_rampup=False, etcd_host=None, **kwargs):
             self.pkt_size = pkt_size
             self.flow_rate = flow_rate
             self.fwd_pid = fwd_pid
@@ -71,24 +73,22 @@ class TestingMode(object):
             self.min_dst_ip = min_dst_ip
             self.max_dst_ip = max_dst_ip
             self.dummy_mac = dummy_mac
-            if isinstance(outer_macs, str):
-                self.outer_macs = outer_macs.split(' ')
-            else:
-                self.outer_macs = outer_macs
             self.min_src_port = min_src_port
             self.max_src_port = max_src_port
             self.min_dst_port = min_dst_port
             self.max_dst_port = max_dst_port
             self.proto = proto
             self.quick_rampup = quick_rampup
+            self.etcd_host = etcd_host
 
     class Spec(TrafficSpec):
 
-        def __init__(self, tenants=None, core=None, 
+        def __init__(self, etcd_host=None, tenants=None, core=None,
                      rx_timestamp_offset=0, tx_timestamp_offset=0, **kwargs):
             self.core = core
             self.tenants = list()
             for tenant in tenants:
+                tenant['etcd_host'] = etcd_host
                 self.tenants.append(TestingMode.Tenant(**tenant))
 
             if not rx_timestamp_offset:
@@ -108,6 +108,21 @@ class TestingMode(object):
             return self.__str__()
 
     def setup_tenant_tx(cli, core, src_mac, spec, pipeline):
+        @retry
+        def get_etcd_handle(etcd_host)
+            host, port = etcd_host.split(':')
+            client = etcd3.client(host=host, port=port)
+            return client
+
+        client = get_etcd_handle(spec['etcd_host'])
+        dsts_key = '/pangolin/v1/vxlan/instantiate/vnis/{}'
+        fwd_dst_key = dsts_key.format(spec.fwd_pid)
+        rev_dst_key = dsts_key.format(spec.rev_pid)
+        fwd_dsts = client.watch_once(fwd_dst_key).value
+        rev_dsts = client.watch_once(rev_dst_key).value
+        macs = [dst['mac'] for dst in fwd_dsts['destinations']]
+        macs.extend([dst['mac'] for dst in rev_dsts['destinations']])
+
         setup_mclasses(cli, globals())
 
         fwd_pkt_template = _build_pkt(spec, spec.pkt_size)
@@ -189,9 +204,9 @@ class TestingMode(object):
         pipeline.add_edge(setmd_rev, 0, rev_mac_lb, 0)
 
         outer_mac_lb = HashLB(mode='l4')
-        outer_mac_lb.set_gates(gates=list(range(len(spec.outer_macs))))
+        outer_mac_lb.set_gates(gates=list(range(len(macs))))
         pipeline.add_edge(ethencap, 0, outer_mac_lb, 0)
-        for i, mac in enumerate(spec.outer_macs):
+        for i, mac in enumerate(macs):
             mac64 = mac2int(mac)
             update = Update(fields=[{'offset': 0, 'size': 6, 'value': mac64}])
             pipeline.add_edge(outer_mac_lb, i, update, 0)

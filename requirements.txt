@@ -1,3 +1,5 @@
 ruamel.yaml==0.15.37
 scapy==2.4.0
 grpcio==1.9.1
+etcd3==0.6.2
+retrying
