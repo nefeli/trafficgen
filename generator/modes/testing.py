@@ -114,7 +114,7 @@ class TestingMode(object):
             client = etcd3.client(host=host, port=port)
             return client
 
-        client = get_etcd_handle(spec['etcd_host'])
+        client = get_etcd_handle(spec.etcd_host)
         dsts_key = '/pangolin/v1/vxlan/instantiate/vnis/{}'
         fwd_dst_key = dsts_key.format(spec.fwd_pid)
         rev_dst_key = dsts_key.format(spec.rev_pid)
