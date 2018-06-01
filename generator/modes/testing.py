@@ -37,7 +37,7 @@ class TestingMode(object):
 
     class Tenant(object):
         def __init__(self, pkt_size=60,
-                     vni=None, weight=1,
+                     vni=None, name=None, weight=1,
                      flow_duration=10, flow_rate=100, pps_per_flow=1000,
                      dst_macs=None,
                      tun_src_ip=None, tun_dst_ip=None,
@@ -140,8 +140,12 @@ class TestingMode(object):
         dst_mac64 = mac2int(spec.dst_macs[0])
 
         # Setup forward traffic
-        src = FlowGen(
-            name='flowgen_c{}_p{}'.format(core, spec.vni), **args)
+        if spec.name is not None:
+            src = FlowGen(
+                name='flowgen_c{}_{}'.format(core, spec.name), **args)
+        else:
+            src = FlowGen(
+                name='flowgen_c{}_p{}'.format(core, spec.vni), **args)
         cksum = IPChecksum()
         setmd = SetMetadata(
             attrs=[
