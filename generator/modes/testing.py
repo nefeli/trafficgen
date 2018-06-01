@@ -260,7 +260,6 @@ class TestingMode(object):
         dst_ip_range = atoh(spec.max_dst_ip) - atoh(spec.min_dst_ip)
         src_port_range = spec.max_src_port - spec.min_src_port
         dst_port_range = spec.max_dst_port - spec.min_dst_port
-        print(pps, spec.flow_rate, spec.pps_per_flow, spec.flow_duration)
         return {'template': pkt_template,
                 'pps': pps,
                 'flow_rate': spec.flow_rate,

@@ -47,18 +47,47 @@ def load_yaml_config(conf_path):
 
 
 def load_config(conf_path):
-    # Try to guess config format from file name
-    _, ext = os.path.splitext(conf_path)
-    if ext.lower() == 'json':
-        return load_json_config(conf_path)
-    if ext.lower() in ('yaml', 'yml'):
-        return load_yaml_config(conf_path)
+    def _load_config(path):
+        # Try to guess config format from file name
+        _, ext = os.path.splitext(path)
+        if ext.lower() == 'json':
+            return load_json_config(path)
+        if ext.lower() in ('yaml', 'yml'):
+            return load_yaml_config(path)
 
-    # Fall back onto json by default, then yaml
-    try:
-        return load_json_config(conf_path)
-    except:
-        return load_yaml_config(conf_path)
+        # Fall back onto json by default, then yaml
+        try:
+            return load_json_config(path)
+        except:
+            return load_yaml_config(path)
+
+    def _load_includes(x):
+        if not isinstance(x, dict):
+            return copy.deepcopy(x)
+
+        ret = copy.deepcopy(x)
+        includes = ret.pop('includes', None)
+        if isinstance(includes, list):
+            for include in includes:
+                ret = {**ret, **load_config(include)}
+        return ret
+
+    ret = _load_config(conf_path)
+    if isinstance(ret, dict):
+        ret = _load_includes(ret)
+        for k, v in ret.items():
+            if isinstance(v, list):
+                ret[k] = [_load_includes(z) for z in v]
+            else:
+                ret[k] = _load_includes(v)
+
+    if isinstance(ret, list):
+        for v in ret:
+            if isinstance(v, list):
+                ret[k] = [_load_includes(z) for z in v]
+            else:
+                ret[k] = _load_includes(v)
+    return ret
 
 
 def get_var_attrs(cli, var_token, partial_word):
@@ -731,10 +760,7 @@ def start(cli, port, mode, spec):
 @cmd('start_file PORT MODE CONF_FILE', 'Start sending packets on a port')
 def start_file(cli, port, mode, conf_file):
     conf = load_config(conf_file)
-    includes = conf.pop('includes', None)
-    if isinstance(includes, list):
-        for include in includes:
-            conf = {**conf, **load_config(include)}
+    pprint.pprint(conf)
 
     # Find traffic mode
     tmode = None
