@@ -140,7 +140,7 @@ class WeightedProducers(Producers):
             cli.bess.add_tc(root_tc, wid=wid, policy='weighted_fair',
                             resource=self.__resource)
 
-        for weight, module in self.__producers.items():
+        for module, weight in self.__producers.items():
             cli.bess.attach_task(module.name, parent=root_tc, share=weight)
 
 

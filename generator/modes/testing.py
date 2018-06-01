@@ -6,7 +6,7 @@ import scapy.all as scapy
 import socket
 import struct
 
-from generator.common import TrafficSpec, Pipeline, RoundRobinProducers, WeightedProducers, setup_mclasses
+from generator.common import TrafficSpec, Pipeline, WeightedProducers, setup_mclasses
 
 
 def ntoa(ip):
@@ -22,14 +22,10 @@ def mac2int(mac):
                                        enumerate(list(map(lambda x: int(x, 16), mac.split(':')))[::-1])])
 
 
-def _build_pkt(spec, size, reverse=False):
+def _build_pkt(spec, size):
     eth = scapy.Ether(src='02:00:00:00:00:01', dst='02:00:00:00:00:02')
-    if reverse:
-        ip = scapy.IP(src=spec.min_dst_ip, dst=spec.min_src_ip)
-        udp = scapy.UDP(sport=spec.min_dst_port, dport=spec.min_src_port)
-    else:
-        ip = scapy.IP(src=spec.min_src_ip, dst=spec.min_dst_ip)
-        udp = scapy.UDP(sport=spec.min_src_port, dport=spec.min_dst_port)
+    ip = scapy.IP(src=spec.min_src_ip, dst=spec.min_dst_ip)
+    udp = scapy.UDP(sport=spec.min_src_port, dport=spec.min_dst_port)
     sz = size - len(eth / ip / udp)
     payload = ('hello' + '0123456789' * 200)[:sz]
     pkt = eth / ip / udp / payload
@@ -41,32 +37,26 @@ class TestingMode(object):
 
     class Tenant(object):
         def __init__(self, pkt_size=60,
-                     fwd_pid=None, rev_pid=None, fwd_weight=1, rev_weight=1,
+                     vni=None, weight=1,
                      flow_duration=10, flow_rate=100, pps_per_flow=1000,
-                     fwd_dst_macs=None, rev_dst_macs=None,
+                     dst_macs=None,
                      tun_src_ip=None, tun_dst_ip=None,
                      min_src_ip=None, max_src_ip=None,
                      min_dst_ip=None, max_dst_ip=None,
                      min_src_port=None, max_src_port=None,
-                     dummy_mac=None,
+                     dummy_mac=None, outer_macs=None,
                      min_dst_port=None, max_dst_port=None,
                      proto=None, quick_rampup=False, etcd_host=None, **kwargs):
             self.pkt_size = pkt_size
             self.flow_rate = flow_rate
-            self.fwd_pid = fwd_pid
-            self.rev_pid = rev_pid
-            self.fwd_weight = fwd_weight
-            self.rev_weight = rev_weight
+            self.vni = vni
+            self.weight = weight
             self.flow_duration = flow_duration
             self.pps_per_flow = pps_per_flow
-            if isinstance(fwd_dst_macs, str):
-                self.fwd_dst_macs = fwd_dst_macs.split(' ')
+            if isinstance(dst_macs, str):
+                self.dst_macs = dst_macs.split(' ')
             else:
-                self.fwd_dst_macs = fwd_dst_macs
-            if isinstance(rev_dst_macs, str):
-                self.rev_dst_macs = rev_dst_macs.split(' ')
-            else:
-                self.rev_dst_macs = rev_dst_macs
+                self.dst_macs = dst_macs
             self.tun_src_ip = tun_src_ip
             self.tun_dst_ip = tun_dst_ip
             self.min_src_ip = min_src_ip
@@ -81,7 +71,7 @@ class TestingMode(object):
             self.proto = proto
             self.quick_rampup = quick_rampup
             self.etcd_host = etcd_host
-            self.macs = None
+            self.outer_macs = outer_macs
 
     class Spec(TrafficSpec):
 
@@ -109,7 +99,7 @@ class TestingMode(object):
         def __repr__(self):
             return self.__str__()
 
-    def setup_tenant_tx(cli, core, src_mac, spec, pipeline):
+    def get_vni_macs(vni, etcd_host):
         @retry
         def get_etcd_handle(etcd_host):
             host, port = etcd_host.split(':')
@@ -120,22 +110,20 @@ class TestingMode(object):
             ret = client.get(key)
             if ret:
                 return ret[0]
-            return client.watch_once(fwd_dst_key).value
+            return client.watch_once(key).value
 
+        client = get_etcd_handle(etcd_host)
+        dsts_key = '/pangolin/v1/vxlan/instantiate/vnis/{}'.format(vni)
+        dsts = json.loads(get_or_watch(client, dsts_key))
+        return [dst['mac'] for dst in dsts['destinations']]
 
-        client = get_etcd_handle(spec.etcd_host)
-        dsts_key = '/pangolin/v1/vxlan/instantiate/vnis/{}'
-        fwd_dst_key = dsts_key.format(spec.fwd_pid)
-        rev_dst_key = dsts_key.format(spec.rev_pid)
-        fwd_dsts = json.loads(get_or_watch(client, fwd_dst_key))
-        rev_dsts = json.loads(get_or_watch(client, rev_dst_key))
-        spec.macs = [dst['mac'] for dst in fwd_dsts['destinations']]
-        spec.macs.extend([dst['mac'] for dst in rev_dsts['destinations']])
+    def setup_tenant_tx(cli, core, src_mac, spec, pipeline):
+        if not spec.outer_macs:
+            spec.outer_macs = TestingMode.get_vni_macs(spec.vni, spec.etcd_host)
 
         setup_mclasses(cli, globals())
 
-        fwd_pkt_template = _build_pkt(spec, spec.pkt_size)
-        rev_pkt_template = _build_pkt(spec, spec.pkt_size, True)
+        pkt_template = _build_pkt(spec, spec.pkt_size)
         args = TestingMode.make_args(spec)
 
         vencap = VXLANEncap()
@@ -145,161 +133,96 @@ class TestingMode(object):
         pipeline.add_edge(ipencap, 0, ethencap, 0)
 
         # meh.
-        if len(spec.fwd_dst_macs) == 0:
-            spec.fwd_dst_macs = [spec.fwd_dst_mac]
-        if len(spec.rev_dst_macs) == 0:
-            spec.rev_dst_macs = [spec.rev_dst_mac]
+        if len(spec.dst_macs) == 0:
+            spec.dst_macs = [spec.dst_mac]
 
         src_mac64 = mac2int(src_mac)
-        fwd_dst_mac64 = mac2int(spec.fwd_dst_macs[0])
-        rev_dst_mac64 = mac2int(spec.rev_dst_macs[0])
+        dst_mac64 = mac2int(spec.dst_macs[0])
 
         # Setup forward traffic
-        src_fwd = FlowGen(
-            name='flowgen_fwd_c{}_p{}'.format(core, spec.fwd_pid), **args['fwd'])
-        cksum_fwd = IPChecksum()
-        setmd_fwd = SetMetadata(
+        src = FlowGen(
+            name='flowgen_c{}_p{}'.format(core, spec.vni), **args)
+        cksum = IPChecksum()
+        setmd = SetMetadata(
             attrs=[
                 {'name': 'tun_ip_src', 'size': 4,
                     'value_int': atoh(spec.tun_src_ip)},
                                     {'name': 'tun_ip_dst', 'size': 4, 'value_int': atoh(
                                         spec.tun_dst_ip)},
                                     {'name': 'tun_id', 'size': 4,
-                                        'value_int': spec.fwd_pid},
+                                        'value_int': spec.vni},
                                     {'name': 'ether_src', 'size':
                                         6, 'value_int': src_mac64},
-                                    {'name': 'ether_dst', 'size': 6, 'value_int': fwd_dst_mac64}])
-        pipeline.add_edge(src_fwd, 0, cksum_fwd, 0)
-        pipeline.add_edge(cksum_fwd, 0, setmd_fwd, 0)
-
-        # Setup reverse traffic
-        src_rev = FlowGen(
-            name='flowgen_rev_c{}_p{}'.format(core, spec.rev_pid), **args['rev'])
-        cksum_rev = IPChecksum()
-        setmd_rev = SetMetadata(
-            attrs=[
-                {'name': 'tun_ip_src', 'size': 4,
-                    'value_int': atoh(spec.tun_src_ip)},
-                                    {'name': 'tun_ip_dst', 'size': 4, 'value_int': atoh(
-                                        spec.tun_dst_ip)},
-                                    {'name': 'tun_id', 'size': 4,
-                                        'value_int': spec.rev_pid},
-                                    {'name': 'ether_src', 'size':
-                                        6, 'value_int': src_mac64},
-                                    {'name': 'ether_dst', 'size': 6, 'value_int': rev_dst_mac64}])
-        pipeline.add_edge(src_rev, 0, cksum_rev, 0)
-        pipeline.add_edge(cksum_rev, 0, setmd_rev, 0)
+                                    {'name': 'ether_dst', 'size': 6, 'value_int': dst_mac64}])
+        pipeline.add_edge(src, 0, cksum, 0)
+        pipeline.add_edge(cksum, 0, setmd, 0)
 
         # MAC load balancing
-        fwd_mac_lb = HashLB(mode='l4')
-        fwd_mac_lb.set_gates(gates=list(range(len(spec.fwd_dst_macs))))
+        mac_lb = HashLB(mode='l4')
+        mac_lb.set_gates(gates=list(range(len(spec.dst_macs))))
 
-        rev_mac_lb = HashLB(mode='l4')
-        rev_mac_lb.set_gates(gates=list(range(len(spec.rev_dst_macs))))
-
-        for i, mac in enumerate(spec.fwd_dst_macs):
+        for i, mac in enumerate(spec.dst_macs):
             mac64 = mac2int(mac)
             update = Update(fields=[{'offset': 0, 'size': 6, 'value': mac64}])
-            pipeline.add_edge(fwd_mac_lb, i, update, 0)
+            pipeline.add_edge(mac_lb, i, update, 0)
             pipeline.add_edge(update, 0, vencap, 0)
 
-        for i, mac in enumerate(spec.rev_dst_macs):
-            mac64 = mac2int(mac)
-            update = Update(fields=[{'offset': 0, 'size': 6, 'value': mac64}])
-            pipeline.add_edge(rev_mac_lb, i, update, 0)
-            pipeline.add_edge(update, 0, vencap, 0)
-
-        pipeline.add_edge(setmd_fwd, 0, fwd_mac_lb, 0)
-        pipeline.add_edge(setmd_rev, 0, rev_mac_lb, 0)
+        pipeline.add_edge(setmd, 0, mac_lb, 0)
 
         outer_mac_lb = HashLB(mode='l4')
-        outer_mac_lb.set_gates(gates=list(range(len(spec.macs))))
+        outer_mac_lb.set_gates(gates=list(range(len(spec.outer_macs))))
         pipeline.add_edge(ethencap, 0, outer_mac_lb, 0)
-        for i, mac in enumerate(spec.macs):
+        for i, mac in enumerate(spec.outer_macs):
             mac64 = mac2int(mac)
             update = Update(fields=[{'offset': 0, 'size': 6, 'value': mac64}])
             pipeline.add_edge(outer_mac_lb, i, update, 0)
             pipeline.add_peripheral_edge(0, update, 0)
 
-        return src_fwd, src_rev
+        return src
 
     @staticmethod
     def setup_tx_pipeline(cli, port, spec, pipeline):
         setup_mclasses(cli, globals())
 
-        producers = list()
+        producers = dict()
         for tenant in spec.tenants:
-            fwd_prod, rev_prod = TestingMode.setup_tenant_tx(cli, spec.core, spec.src_mac, tenant, pipeline)
-            producers.extend([fwd_prod, rev_prod])
+            prod = TestingMode.setup_tenant_tx(cli, spec.core, spec.src_mac, tenant, pipeline)
+            producers[prod] = tenant.weight
 
-        pipeline.set_producers(RoundRobinProducers(producers))
+        pipeline.set_producers(WeightedProducers(producers))
 
     def setup_tenant_rx(cli, core, src_mac, spec, pipeline, port_out):
+        if not spec.outer_macs:
+            spec.outer_macs = TestingMode.get_vni_macs(spec.vni, spec.etcd_host)
+
         setup_mclasses(cli, globals())
 
-        @retry
-        def get_etcd_handle(etcd_host):
-            host, port = etcd_host.split(':')
-            client = etcd3.client(host=host, port=port)
-            return client
-
-        def get_or_watch(client, key):
-            ret = client.get(key)
-            if ret:
-                return ret[0]
-            return client.watch_once(fwd_dst_key).value
-
-
-        client = get_etcd_handle(spec.etcd_host)
-        dsts_key = '/pangolin/v1/vxlan/instantiate/vnis/{}'
-        fwd_dst_key = dsts_key.format(spec.fwd_pid)
-        rev_dst_key = dsts_key.format(spec.rev_pid)
-        fwd_dsts = json.loads(get_or_watch(client, fwd_dst_key))
-        rev_dsts = json.loads(get_or_watch(client, rev_dst_key))
-        spec.macs = [dst['mac'] for dst in fwd_dsts['destinations']]
-        spec.macs.extend([dst['mac'] for dst in rev_dsts['destinations']])
-
-        fwd_arp_blast = ArpBlast(sha=spec.dummy_mac)
-        rev_arp_blast = ArpBlast(sha=spec.dummy_mac)
+        arp_blast = ArpBlast(sha=spec.dummy_mac)
         vxencap = VXLANEncap()
         ipencap = IPEncap()
         ethencap = EtherEncap()
 
         src_mac64 = mac2int(src_mac)
-        fwd_dst_mac64 = mac2int(spec.macs[0])
-        rev_dst_mac64 = mac2int(spec.macs[0])
+        dst_mac64 = mac2int(spec.outer_macs[0])
 
-        setmd_fwd = SetMetadata(
+        setmd = SetMetadata(
             attrs=[
                 {'name': 'tun_ip_src', 'size': 4,
                     'value_int': atoh(spec.tun_src_ip)},
                                     {'name': 'tun_ip_dst', 'size': 4, 'value_int': atoh(
                                         spec.tun_dst_ip)},
                                     {'name': 'tun_id', 'size': 4,
-                                        'value_int': spec.fwd_pid},
+                                        'value_int': spec.vni},
                                     {'name': 'ether_src', 'size':
                                         6, 'value_int': src_mac64}])
-        setmd_rev = SetMetadata(
-            attrs=[
-                {'name': 'tun_ip_src', 'size': 4,
-                    'value_int': atoh(spec.tun_src_ip)},
-                                    {'name': 'tun_ip_dst', 'size': 4, 'value_int': atoh(
-                                        spec.tun_dst_ip)},
-                                    {'name': 'tun_id', 'size': 4,
-                                        'value_int': spec.rev_pid},
-                                    {'name': 'ether_src', 'size':
-                                        6, 'value_int': src_mac64}])
+        pipeline.add_edge(setmd, 0, vxencap, 0)
 
-        pipeline.add_edge(setmd_fwd, 0, vxencap, 0)
-        pipeline.add_edge(setmd_rev, 0, vxencap, 0)
-
-        pipeline.add_edge(fwd_arp_blast, 0, setmd_fwd, 0)
-        pipeline.add_edge(rev_arp_blast, 0, setmd_rev, 0)
+        pipeline.add_edge(arp_blast, 0, setmd, 0)
         pipeline.add_edge(vxencap, 0, ipencap, 0)
         pipeline.add_edge(ipencap, 0, ethencap, 0)
         pipeline.add_edge(ethencap, 0, port_out, 0)
 
-        return (fwd_arp_blast, rev_arp_blast)
+        return arp_blast
 
     @staticmethod
     def setup_rx_pipeline(cli, port, spec, pipeline, port_out):
@@ -323,43 +246,29 @@ class TestingMode(object):
         # or ExactMatch
         gate = 1
         for tenant in spec.tenants:
-            farp, rarp = TestingMode.setup_tenant_rx(cli, spec.core, spec.src_mac, tenant, pipeline, port_out)
-            em.add(fields=[{'value_int': socket.htonl(tenant.fwd_pid)}],
+            arp = TestingMode.setup_tenant_rx(cli, spec.core, spec.src_mac, tenant, pipeline, port_out)
+            em.add(fields=[{'value_int': socket.htonl(tenant.vni)}],
                    gate=gate + 1)
-            pipeline.add_edge(em, gate + 1, farp, 0)
-            em.add(fields=[{'value_int': socket.htonl(tenant.rev_pid)}],
-                   gate=gate + 2)
-            pipeline.add_edge(em, gate + 2, rarp, 0)
-            gate += 2
+            pipeline.add_edge(em, gate + 1, arp, 0)
+            gate += 1
 
     @staticmethod
     def make_args(spec):
-        fwd_pkt_template = _build_pkt(spec, spec.pkt_size)
-        rev_pkt_template = _build_pkt(spec, spec.pkt_size, True)
+        pkt_template = _build_pkt(spec, spec.pkt_size)
         pps = spec.flow_rate * spec.pps_per_flow * spec.flow_duration
         src_ip_range = atoh(spec.max_src_ip) - atoh(spec.min_src_ip)
         dst_ip_range = atoh(spec.max_dst_ip) - atoh(spec.min_dst_ip)
         src_port_range = spec.max_src_port - spec.min_src_port
         dst_port_range = spec.max_dst_port - spec.min_dst_port
-        return {'fwd': {'template': fwd_pkt_template,
-                        'pps': pps / 2,
-                        'flow_rate': spec.flow_rate / 2,
-                        'flow_duration': spec.flow_duration,
-                        'arrival': 'uniform',
-                        'duration': 'uniform',
-                        'quick_rampup': spec.quick_rampup,
-                        'ip_src_range': src_ip_range,
-                        'ip_dst_range': dst_ip_range,
-                        'port_src_range': src_port_range,
-                        'port_dst_range': dst_port_range},
-                'rev': {'template': rev_pkt_template,
-                        'pps': pps / 2,
-                        'flow_rate': spec.flow_rate / 2,
-                        'flow_duration': spec.flow_duration,
-                        'arrival': 'uniform',
-                        'duration': 'uniform',
-                        'quick_rampup': spec.quick_rampup,
-                        'ip_src_range': dst_ip_range,
-                        'ip_dst_range': src_ip_range,
-                        'port_src_range': dst_port_range,
-                        'port_dst_range': src_port_range}}
+        print(pps, spec.flow_rate, spec.pps_per_flow, spec.flow_duration)
+        return {'template': pkt_template,
+                'pps': pps,
+                'flow_rate': spec.flow_rate,
+                'flow_duration': spec.flow_duration,
+                'arrival': 'uniform',
+                'duration': 'uniform',
+                'quick_rampup': spec.quick_rampup,
+                'ip_src_range': src_ip_range,
+                'ip_dst_range': dst_ip_range,
+                'port_src_range': src_port_range,
+                'port_dst_range': dst_port_range}

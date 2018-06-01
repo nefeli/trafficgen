@@ -571,7 +571,7 @@ def _start(cli, port, mode, tmode, ts):
         port_out = PortOut(port=port)
 
         for i, core in enumerate(ts.tx_cores):
-            s = copy.copy(ts)
+            s = copy.deepcopy(ts)
             if 'testing' in mode:
                 for tenant in s.tenants:
                     tenant.flow_rate /= len(ts.tx_cores)
