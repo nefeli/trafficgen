@@ -47,6 +47,7 @@ class TestingMode(object):
                      dummy_mac=None, outer_macs=None,
                      min_dst_port=None, max_dst_port=None,
                      proto=None, quick_rampup=False, etcd_host=None, **kwargs):
+            self.name = name
             self.pkt_size = pkt_size
             self.flow_rate = flow_rate
             self.vni = vni

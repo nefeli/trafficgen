@@ -1,3 +1,4 @@
+name: vni2
 pkt_size: 80
 flow_rate: 100
 flow_duration: 100
