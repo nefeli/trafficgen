@@ -82,7 +82,7 @@ if __name__ == '__main__':
         'max_dst_port': dst_ports[dst_prefix][1]}
 
     misc_conf = {
-        'name': '{}to{}'.format(src_prefix, dst_prefix),
+        'name': 'p{}_{}to{}'.format(args.src_vni, src_prefix, dst_prefix),
         'proto': 17,
         'quick_rampup': True}
 
