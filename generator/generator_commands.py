@@ -760,7 +760,6 @@ def start(cli, port, mode, spec):
 @cmd('start_file PORT MODE CONF_FILE', 'Start sending packets on a port')
 def start_file(cli, port, mode, conf_file):
     conf = load_config(conf_file)
-    pprint.pprint(conf)
 
     # Find traffic mode
     tmode = None
