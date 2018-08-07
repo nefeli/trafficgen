@@ -4,7 +4,7 @@ flow_rate: 100
 flow_duration: 100
 pps_per_flow: 100
 vni: 258
-ipsec: false
+ipsec: true
 weight: 1
 dst_macs:
     - 00:16:3d:22:33:57

@@ -58,6 +58,8 @@ def setup_mclasses(cli, globs):
         'HashLB',
         'IPChecksum',
         'IPEncap',
+        'IPsecEncap',
+        'IPsecDecap',
         'Measure',
         'Merge',
         'PortOut',
@@ -241,6 +243,7 @@ class TrafficSpec(object):
                  dst_mac='02:1e:67:9f:4d:bb', src_ip='192.168.0.1',
                  dst_ip='10.0.0.1', tx_timestamp_offset=0,
                  rx_timestamp_offset=0,
+                 ipsec=False,
                  rfc2544_loss_rate=None,
                  rfc2544_window=DEFAULT_2544_WINDOW,
                  rfc2544_warmup=DEFAULT_2544_WARMUP,
@@ -257,6 +260,7 @@ class TrafficSpec(object):
         self.rx_cores = rx_cores
         self.tx_timestamp_offset = tx_timestamp_offset
         self.rx_timestamp_offset = rx_timestamp_offset
+        self.ipsec = ipsec
         self.rfc2544_loss_rate = rfc2544_loss_rate
         self.rfc2544_window = rfc2544_window
         self.rfc2544_warmup = rfc2544_warmup

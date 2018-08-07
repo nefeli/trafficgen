@@ -614,6 +614,10 @@ def _start(cli, port, mode, tmode, ts):
             tx_pipe.tx_q = Queue()
             out_modules = [tx_pipe.tx_q,
                            Timestamp(offset=ts.tx_timestamp_offset),
+                           IPsecEncap(spi=0xdeadbeef,
+                                      key=b'sixteenbytes key1234',
+                                      iv=b'01234567',
+                                      eth_frame=True),
                            tx_pipe.tx_rr]
             out_zipped = list(zip(out_modules, [0 for _ in out_modules]))
             _connect_pipeline(cli, out_zipped)
@@ -680,6 +684,8 @@ def _start(cli, port, mode, tmode, ts):
 
             measure_name = 'trafficgen_measure_c{}'.format(core)
             front += [
+                IPsecDecap(spi=0xdeadbeef, key=b'sixteenbytes key1234',
+                           eth_frame=True),
                 Measure(name=measure_name, offset=ts.rx_timestamp_offset, jitter_sample_prob=1.0)]
             front_zipped = list(zip(front, [0 for _ in front]))
             _connect_pipeline(cli, front_zipped)
