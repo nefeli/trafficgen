@@ -132,6 +132,14 @@ class TestingMode(object):
         ethencap = EtherEncap()
         pipeline.add_edge(vencap, 0, ipencap, 0)
         pipeline.add_edge(ipencap, 0, ethencap, 0)
+        last_encap = ethencap
+        if spec.ipsec:
+            ipsec_encap = IPsecEncap(spi=0xdeadbeef,
+                                     key=b'sixteenbytes key1234',
+                                     iv=b'01234567',
+                                     eth_frame=True)
+            last_encap = ipsec_encap
+            pipeline.add_edge(ethencap, 0, ipsec_encap, 0)
 
         # meh.
         if len(spec.dst_macs) == 0:
@@ -176,7 +184,7 @@ class TestingMode(object):
 
         outer_mac_lb = HashLB(mode='l4')
         outer_mac_lb.set_gates(gates=list(range(len(spec.outer_macs))))
-        pipeline.add_edge(ethencap, 0, outer_mac_lb, 0)
+        pipeline.add_edge(last_encap, 0, outer_mac_lb, 0)
         for i, mac in enumerate(spec.outer_macs):
             mac64 = mac2int(mac)
             update = Update(fields=[{'offset': 0, 'size': 6, 'value': mac64}])
@@ -235,9 +243,14 @@ class TestingMode(object):
 
         vpop = VLANPop()
         get_sender = SetMetadata(attrs=[{'name': 'ether_dst', 'size': 6, 'offset': 6}])
+        ipsec_decap = IPsecDecap(spi=0xdeadbeef, key=b'sixteenbytes key1234', eth_frame=True)
         vxdecap = VXLANDecap()
         pipeline.add_edge(vpop, 0, get_sender, 0)
-        pipeline.add_edge(get_sender, 0, vxdecap, 0)
+        if spec.ipsec:
+            pipeline.add_edge(get_sender, 0, ipsec_decap, 0)
+            pipeline.add_edge(ipsec_decap, 0, vxdecap, 0)
+        else:
+            pipeline.add_edge(get_sender, 0, vxdecap, 0)
         pipeline.add_peripheral_edge(0, vpop, 0)
 
         sink = Sink()
