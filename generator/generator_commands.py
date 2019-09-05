@@ -29,6 +29,7 @@ from generator.common import *
 import generator.modes
 
 available_cores = list(range(multiprocessing.cpu_count()))
+ports = dict()
 
 DEFAULT_STATS_CSV = '/tmp/bench.csv'
 stats_csv = DEFAULT_STATS_CSV
@@ -84,11 +85,11 @@ def get_var_attrs(cli, var_token, partial_word):
                 pass
 
         elif var_token == 'PORT':
-            var_type = 'portid'
+            var_type = 'name'
             var_desc = 'a port identifier'
 
         elif var_token == 'PORT...':
-            var_type = 'portid+'
+            var_type = 'name+'
             var_desc = 'a port identifier'
 
         elif var_token == '[TRAFFIC_SPEC...]':
@@ -102,6 +103,10 @@ def get_var_attrs(cli, var_token, partial_word):
             var_type = 'filename'
             var_desc = 'configuration filename'
             var_candidates = bess_commands.complete_filename(partial_word)
+
+        elif var_token == '[PORT_ARGS...]':
+            var_type = 'map'
+            var_desc = 'initial configuration for port'
 
     except socket.error as e:
         if e.errno in [errno.ECONNRESET, errno.EPIPE]:
@@ -124,7 +129,7 @@ def get_var_attrs(cli, var_token, partial_word):
 
 
 def split_var(cli, var_type, line):
-    if var_type in ['name', 'filename', 'endis', 'int', 'portid']:
+    if var_type in ['name', 'filename', 'endis', 'int']:
         pos = line.find(' ')
         if pos == -1:
             head = line
@@ -133,7 +138,7 @@ def split_var(cli, var_type, line):
             head = line[:pos]
             tail = line[pos:]
 
-    elif var_type in ['wid+', 'name+', 'map', 'pyobj', 'opts', 'portid+']:
+    elif var_type in ['wid+', 'name+', 'map', 'pyobj', 'opts']:
         head = line
         tail = ''
 
@@ -173,22 +178,6 @@ def bind_var(cli, var_type, line):
         for name in val:
             if re.match(r'^[_a-zA-Z][\w]*$', name) is None:
                 raise cli.BindError('"name" must be [_a-zA-Z][_a-zA-Z0-9]*')
-
-    elif var_type == 'portid':
-        pci = re.match(r'^[0-9a-fA-F]{2}:[0-9a-fA-F]{2}.[0-9a-fA-F]$', val)
-        dpdk_id = re.match(r'^[0-9]+$', val)
-        if pci is None and dpdk_id is None:
-            raise cli.BindError('"portid" must be a valid BUS:SLOT.FUNCTION'
-                                ' address or an integer')
-
-    elif var_type == 'portid+':
-        val = sorted(list(set(head.split())))  # collect unique items
-        for v in val:
-            pci = re.match(r'^[0-9a-fA-F]{2}:[0-9a-fA-F]{2}.[0-9a-fA-F]$', v)
-            dpdk_id = re.match(r'^[0-9]+$', v)
-            if pci is None and dpdk_id is None:
-                raise cli.BindError('"portid" must be a valid BUS:SLOT.FUNCTION'
-                                    ' address or an integer')
 
     elif var_type == 'filename':
         if val.find('\0') >= 0:
@@ -281,6 +270,7 @@ def _do_reset(cli):
 @cmd('reset', 'Reset trafficgen')
 def reset(cli):
     bess_commands.warn(cli, 'Going to reset everything.', _do_reset)
+
 
 PortRate = collections.namedtuple('PortRate',
                                   ['inc_packets', 'inc_dropped', 'inc_bytes',
@@ -442,7 +432,7 @@ def _monitor_ports(cli, *ports):
             if len(ports) > 1:
                 print_delta('Total', get_delta(
                     get_total(list(last.values())),
-                        get_total(list(now.values()))),
+                    get_total(list(now.values()))),
                     now[port]['timestamp'])
 
             for port in ports:
@@ -483,17 +473,15 @@ def _create_rate_limit_tree(cli, wid, resource, limit):
 
 
 def _create_port_args(cli, port_id, num_rx_cores, num_tx_cores):
+    global ports
     args = {'driver': None, 'name': port_id,
             'arg': {'num_inc_q': num_rx_cores, 'num_out_q': num_tx_cores,
                     'size_inc_q': 2048, 'size_out_q': 2048}}
     args['driver'] = 'PMDPort'
-    if re.match(r'^[0-9a-fA-F]{2}:[0-9a-fA-F]{2}.[0-9a-fA-F]$', port_id) is not None:
-        args['arg']['pci'] = port_id
-    else:
-        try:
-            args['arg']['port_id'] = int(port_id)
-        except:
-            raise cli.CommandError('Invalid port index')
+    if port_id not in ports:
+        raise cli.CommandError('No such port {}'.format(port_id))
+    for k, v in ports[port_id].items():
+        args['arg'][k] = v
     return args
 
 
@@ -747,3 +735,17 @@ def _stop(cli, port):
 def stop(cli, ports):
     for port in ports:
         _stop(cli, port)
+
+
+@cmd('add port PORT [PORT_ARGS...]', 'Create a port with the given args')
+def add_port(cli, port, args):
+    global ports
+    if port in ports:
+        raise cli.CommandError("Port {} already exists".format(port))
+    ports[port] = args
+
+
+@cmd('delete port PORT', 'Create a port with the given args')
+def delete_port(cli, port):
+    global ports
+    ports.pop(port)

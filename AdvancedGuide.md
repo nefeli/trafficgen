@@ -24,7 +24,8 @@ identify which port to generate traffic on by either its PCI address in
 `BUS:SLOT.FUNCTION` format, or by its integral DPDK port id.
 
 ```
-localhost:10514 $ start 03:00.0 udp num_flows=10000, pkt_size=60
+localhost:10514 $ add port portA pci='03:00.0'
+localhost:10514 $ start portA udp num_flows=10000, pkt_size=60
 ```
 
 You can then check how well the DUT is keeping up by running `monitor port`
@@ -80,7 +81,8 @@ to saturate the link. You can do that by appending the `cores` option to your
 command like so:
 
 ```
-localhost:10514 $ start 03:00.0 udp num_flows=10000, pkt_size=60, cores="0 1"
+localhost:10514 $ add port portA pci='03:00.0'
+localhost:10514 $ start portA udp num_flows=10000, pkt_size=60, cores="0 1"
 ```
 
 Run `monitor ports` again and note the higher rates in the `OUT` columns.
