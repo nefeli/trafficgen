@@ -41,8 +41,9 @@ To generate a simple stream of UDP packets on a single port (03:00.0 for
 example) and watch for return traffic, run:
 
 ```
-localhost:10514 $ start 03:00.0 udp
-localhost:10514 $ monitor port 03:00.0
+localhost:10514 $ add port portA pci='03:00.0'
+localhost:10514 $ start portA udp
+localhost:10514 $ monitor port portA
 ```
 
 Use the following commands to start, stop and monitor traffic:
@@ -58,6 +59,8 @@ monitor port PORT...                              Monitor the current traffic of
 set csv CSV                                       Set the CSV file for stats output
 start PORT MODE [TRAFFIC_SPEC...]                 Start sending packets on a port
 stop PORT...                                      Stop sending packets on a set of ports
+add port PORT [PORT_ARGS...]                      Create a port with the given args
+delete port PORT                                  Create a port with the given args
 ```
 
 See the [advanced guide](AdvancedGuide.md) for how to generate different types
