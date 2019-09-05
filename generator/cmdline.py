@@ -164,13 +164,7 @@ def run_cli():
         hist_file = None
         raise
 
-    try:
-        s = bess.BESS()
-        s.connect()
-    except bess.BESS.APIError as e:
-        print('{} (bessd daemon is not running?)'.format(e),
-              file=sys.stderr)
-
+    s = bess.BESS()
     cli = TGENCLI(s, generator_commands, ferr=stderr, interactive=interactive,
                   history_file=hist_file)
     print('Starting BESS...')
