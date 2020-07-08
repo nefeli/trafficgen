@@ -539,12 +539,12 @@ def _start(cli, port, mode, tmode, ts):
 
             # Setup rate limiting, pin pipelines to cores, connect pipelines
             if ts.mbps is not None:
-                bps_per_core = long(1e6 * ts.mbps / num_tx_cores)
+                bps_per_core = int(1e6 * ts.mbps / num_tx_cores)
                 rl_name = \
                     _create_rate_limit_tree(cli, core, 'bit', bps_per_core)
                 cli.bess.attach_module(tx_pipe.tx_q.name, parent=rl_name)
             elif ts.pps is not None:
-                pps_per_core = long(ts.pps / num_tx_cores)
+                pps_per_core = int(ts.pps / num_tx_cores)
                 rl_name = \
                     _create_rate_limit_tree(cli, core, 'packet', pps_per_core)
                 cli.bess.attach_module(tx_pipe.tx_q.name, parent=rl_name)
