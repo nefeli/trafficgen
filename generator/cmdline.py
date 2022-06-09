@@ -14,6 +14,7 @@ import commands as bess_commands
 import generator.generator_commands as generator_commands
 from generator.common import *
 
+NOSTOP = bool(eval(os.getenv("TGEN_NOSTOP", "0")))
 
 class TGENCLI(cli.CLI):
 
@@ -24,6 +25,7 @@ class TGENCLI(cli.CLI):
         self.__running = dict()
         self.__running_lock = threading.Lock()
         self.this_dir = bess_path = os.getenv('BESS_PATH') + '/bessctl'
+        self.nostop = kwargs.pop("nostop", False)
 
         super(TGENCLI, self).__init__(self.cmd_db.cmdlist, **kwargs)
 
@@ -116,11 +118,10 @@ class TGENCLI(cli.CLI):
 
     def loop(self):
         super(TGENCLI, self).loop()
-        print('Stopping ports...')
-        for port in self.ports():
-            generator_commands._stop(self, port)
-        print('Killing BESS...')
-        bess_commands._do_stop(self)
+        if not self.nostop:
+            print('Stopping ports...')
+            for port in self.ports():
+                generator_commands._stop(self, port)
 
     def get_prompt(self):
         if self.bess.is_connected():
@@ -166,28 +167,46 @@ def run_cli():
 
     s = bess.BESS()
     cli = TGENCLI(s, generator_commands, ferr=stderr, interactive=interactive,
-                  history_file=hist_file)
-    print('Starting BESS...')
-    bess_commands._do_start(cli, '-k')
-    cli.loop()
-
-
-def run_cmds(instream):
+                  history_file=hist_file, nostop=NOSTOP)
+    started = False
     try:
-        s = bess.BESS()
         s.connect()
     except bess.BESS.APIError:
         # show no error msg, since user might be about to launch the daemon
         pass
+    except:
+        print('Starting BESS...')
+        bess_commands._do_start(cli, '-k')
+        started = True
 
-    cli = TGENCLI(s, generator_commands, fin=instream, ferr=sys.stderr,
-                  interactive=False)
-    print('Starting BESS...')
-    bess_commands._do_start(cli, '-k')
     cli.loop()
+    if started:
+        print('Killing BESS...')
+        bess_commands._do_stop(self)
+
+
+def run_cmds(instream):
+    s = bess.BESS()
+    cli = TGENCLI(s, generator_commands, fin=instream, ferr=sys.stderr,
+                  interactive=False, nostop=NOSTOP)
+    started = False
+    try:
+        s.connect()
+    except bess.BESS.APIError:
+        # show no error msg, since user might be about to launch the daemon
+        pass
+    except:
+        print('Starting BESS...')
+        bess_commands._do_start(cli, '-k')
+        started = True
+        cli.loop()
 
     # end of loop due to error?
     if cli.stop_loop:
         if cli.last_cmd:
             cli.ferr.write('  Command failed: %s\n' % cli.last_cmd)
         sys.exit(1)
+
+    if started:
+        print('Killing BESS...')
+        bess_commands._do_stop(self)
