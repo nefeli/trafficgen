@@ -7,10 +7,10 @@ import threading
 import time
 
 import pybess.bess as bess
-import cli
+from bessctl import cli
 from pybess.module import *
 
-import commands as bess_commands
+from bessctl import commands as bess_commands
 import generator.generator_commands as generator_commands
 from generator.common import *
 

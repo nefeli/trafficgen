@@ -22,7 +22,7 @@ import tempfile
 import time
 import traceback
 
-import commands as bess_commands
+from bessctl import commands as bess_commands
 from pybess.module import *
 
 from generator.common import *

@@ -11,7 +11,7 @@ try:
     sys.path.insert(1, '%s/bessctl' % bess_path)
     sys.path.insert(1, '%s' % bess_path)
     import pybess.bess
-    import cli
+    import bessctl.cli
 except ImportError:
     print('Cannot import the API module (pybess)', sys.stderr)
     raise
